@@ -1,0 +1,43 @@
+[project]
+name = "specflow"
+version = "0.1.0"
+description = "SpecFlow — монорепозиторий сервисов извлечения атрибутов"
+requires-python = ">=3.13"
+# Корень объединяет сервисы workspace в единое dev-окружение, чтобы
+# `uv sync` и `uv run` работали со всеми сервисами сразу.
+dependencies = [
+    "api-gateway",
+    "attribute-extractor",
+]
+
+[tool.uv.workspace]
+members = ["services/api_gateway", "services/attribute_extractor"]
+
+[tool.uv.sources]
+api-gateway = { workspace = true }
+attribute-extractor = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "httpx2>=2.13",
+    "ruff>=0.16",
+]
+
+[tool.uv]
+# Корневой проект — виртуальный (не устанавливается как пакет).
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api_gateway", "attribute_extractor"]
+
+[tool.pytest.ini_options]
+testpaths = ["services"]
+addopts = "-q"

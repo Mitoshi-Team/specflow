@@ -1,0 +1,38 @@
+name: specflow
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - api_gateway
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./services/frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+      VITE_HMR_CLIENT_PORT: ${NGINX_PORT:-80}
+    restart: unless-stopped
+
+  api_gateway:
+    build:
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
+    environment:
+      API_GATEWAY_CORS_ORIGINS: ${API_GATEWAY_CORS_ORIGINS:-["http://localhost","http://localhost:5173"]}
+      API_GATEWAY_ATTRIBUTE_EXTRACTOR_URL: http://attribute_extractor:8001
+    depends_on:
+      - attribute_extractor
+    restart: unless-stopped
+
+  attribute_extractor:
+    build:
+      context: .
+      dockerfile: services/attribute_extractor/Dockerfile
+    restart: unless-stopped

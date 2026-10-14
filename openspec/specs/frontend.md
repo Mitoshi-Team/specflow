@@ -1,11 +1,13 @@
 # Спецификация: Frontend (веб-интерфейс)
 
 ## 1. Назначение
+
 Веб-интерфейс (SPA) для демонстрации и ручной проверки пайплайна извлечения атрибутов. Позволяет загрузить карточки товаров (CSV/JSON), запустить пакетную обработку через REST API, просмотреть результаты с оценкой уверенности, индикаторами ручной проверки, источниками подтверждения и экспортировать предсказания в формате CSV (PredictionRow).
 
 Стек: **React + TypeScript + Vite**, минимальный UI, fetch API, сборка статикой через nginx.
 
 ## 2. Целевая аудитория
+
 - Команда разработки/исследователей (демонстрация экспериментов, сравнение подходов)
 - Контент/каталог (проверка качества извлечения, отбор кейсов на ручную разметку)
 - Защита решения (наглядный показ работы пайплайна)
@@ -13,8 +15,9 @@
 ## 3. Архитектура фронтенда
 
 ### 3.1 Технологический стек
+
 | Технология | Версия (рекомендуемая) | Назначение |
-|---|---|---|
+| --- | --- | --- |
 | [Vite](https://vitejs.dev/) | ^6.x | Сборка, dev-сервер, HMR |
 | [React](https://react.dev/) | ^19.x | UI-компоненты |
 | [TypeScript](https://www.typescriptlang.org/) | ^5.x | Типизация |
@@ -27,7 +30,8 @@
 **Принцип**: минимализм. Без избыточных UI-библиотек, достаточно CSS-модулей/просто CSS.
 
 ### 3.2 Структура проекта
-```
+
+```text
 services/frontend/
 ├── src/
 │   ├── api/                # Клиент API (fetch)
@@ -49,17 +53,20 @@ services/frontend/
 ```
 
 ### 3.3 Интеграция с API
+
 Фронт взаимодействует с бэкендом через nginx-прокси: все `/api/*` проксируются на `backend:8000`.
 
 **Эндпоинты, используемые UI:**
+
 | Метод | URL | Назначение |
-|---|---|---|
+| --- | --- | --- |
 | `POST` | `/api/v1/extract/batch` | Пакетная обработка загруженных карточек |
 | `GET` | `/api/v1/health` | Проверка доступности сервиса (статус-панель) |
 | `GET` | `/api/v1/info` | Отображение версии пайплайна/сервиса (опц.) |
 | `GET` | `/api/v1/categories` | Выбор категории/просмотр схемы (опц.) |
 
 ## 4. Типизация (TypeScript)
+
 Типы синхронизированы с доменом/API-контрактом (api_contract.md).
 
 ```ts
@@ -127,12 +134,14 @@ export type BatchExtractResponse = {
 ## 5. Пользовательские сценарии
 
 ### Сценарий 1. Загрузка файла
+
 1. Пользователь выбирает CSV или JSON-файл с карточками.
 2. Фронт парсит файл (валидация минимального набора полей).
 3. Отображает предпросмотр (первые 10–20 строк).
 4. Проверяет наличие хотя бы одного из: `title`, `description`, `seller_attributes`.
 
 ### Сценарий 2. Пакетная обработка
+
 1. Нажатие «Обработать».
 2. Блокировка UI + индикатор загрузки, прогресс «обработано/всего».
 3. POST `/api/v1/extract/batch` с `items`, `batch_size` (по умолчанию 10–20, макс. 50).
@@ -140,12 +149,14 @@ export type BatchExtractResponse = {
 5. При ошибке — сообщение с детализацией.
 
 ### Сценарий 3. Просмотр результатов
+
 1. Таблица по карточкам: `product_id`, `category`, `status`, `needs_review`, `low_confidence_count`, `processing_time_ms`.
 2. Раскрывающийся блок атрибутов: `attribute_code`, `normalized_value`, `confidence`, `extraction_method`, `evidence_text`, `source_spans`.
 3. Визуальная индикация: `needs_review=true` — акцент, `confidence < threshold` — выделение, `error` — красный.
 4. Показ `pipeline_version`, `batch_id`, сводки (`total/ok/low_confidence/errors`).
 
 ### Сценарий 4. Экспорт CSV (PredictionRow)
+
 1. Кнопка «Скачать CSV» формирует файл по формату `PredictionRow` (domain-model.md).
 2. Колонки: `product_id`, `title`, `category`, `needs_review`, `status`. Для каждого атрибута — `[attribute_code]` = `normalized_value`, `[attribute_code]_confidence` = `confidence`.
 3. Экспорт только финальных атрибутов (grounded). Пустые ячейки для не извлечённых.
@@ -154,16 +165,18 @@ export type BatchExtractResponse = {
 ## 6. Компоненты UI
 
 ### 6.1 Структурные
+
 | Компонент | Назначение |
-|---|---|
+| --- | --- |
 | `AppLayout` | Общий лэйаут (шапка, контейнер, футер с версией) |
 | `Header` | Заголовок + индикатор здоровья API (`/health`) |
 | `PageHome` | Главная (загрузка + предпросмотр + запуск батча) |
 | `PageResults` | Страница результатов батча |
 
 ### 6.2 Функциональные
+
 | Компонент | Описание |
-|---|---|
+| --- | --- |
 | `FileUpload` | Drag&Drop + file input (CSV/JSON), валидация |
 | `DataPreview` | Предпросмотр загруженных карточек |
 | `BatchControls` | Настройки батча + кнопки «Обработать»/«Сброс» |
@@ -180,6 +193,7 @@ export type BatchExtractResponse = {
 | `EmptyState` | Пустое состояние |
 
 ### 6.3 Валидация загружаемого файла
+
 **CSV (рекомендуемые колонки):** `product_id`, `title`, `description`, `seller_attributes`, `category_id`, `category_name`.
 
 **JSON:** массив объектов `ProductCardRequest`.
@@ -187,8 +201,9 @@ export type BatchExtractResponse = {
 **Валидация:** минимум одно непустое из `title|description|seller_attributes`; корректный JSON в `seller_attributes` (если строка); не пустой файл; разумный размер; расширение `.csv`, `.json`, `.tsv` (опц.).
 
 ## 7. Состояние и хуки
+
 | Хук | Назначение |
-|---|---|
+| --- | --- |
 | `useApiHealth()` | Периодическая проверка `/api/v1/health` |
 | `useBatchExtract()` | Отправка батча с состоянием loading/error/progress |
 | `useFileParser()` | Парсинг CSV/JSON, нормализация, валидация |
@@ -198,8 +213,9 @@ export type BatchExtractResponse = {
 ## 8. Визуализация и UX
 
 ### 8.1 Цветовая индикация
+
 | Элемент | Цвет | Пояснение |
-|---|---|---|
+| --- | --- | --- |
 | `confidence >= 0.9` | Зелёный | Высокая уверенность |
 | `0.8 <= confidence < 0.9` | Жёлтый | Близко к порогу |
 | `confidence < 0.8` | Оранжевый | Ниже типичного auto-порога |
@@ -209,6 +225,7 @@ export type BatchExtractResponse = {
 | `status = low_confidence` | Оранжевый | Много низкоуверенных |
 
 ### 8.2 UX-правила
+
 - Прогресс «Обработано X из Y».
 - Блокировка дублирующих кликов при `loading=true`.
 - Понятные ошибки из API (detail + validation).
@@ -219,11 +236,13 @@ export type BatchExtractResponse = {
 - Всегда показывать `pipeline_version`.
 
 ### 8.3 Показ источников (explainability)
+
 В `AttributesTable` показывать: `evidence_text`, `source_spans[]` (field/text/start/end), `extraction_method`, `is_confirmed_in_text`.
 
 ## 9. Конфигурация и сборка
 
 ### 9.1 Vite конфиг
+
 ```ts
 export default defineConfig({
   plugins: [react()],
@@ -234,10 +253,13 @@ export default defineConfig({
   build: { outDir: 'dist', sourcemap: false, chunkSizeWarningLimit: 1000 }
 })
 ```
+
 В Docker-контейнере проксирование идёт через nginx (`/api` → `backend:8000`).
 
 ### 9.2 Переменные окружения
+
 Только `VITE_*` для статического SPA:
+
 ```env
 VITE_API_BASE_URL=/api/v1
 VITE_DEFAULT_BATCH_SIZE=10
@@ -247,6 +269,7 @@ VITE_DEFAULT_THRESHOLD=0.80
 ```
 
 ### 9.3 Dockerfile (multi-stage)
+
 ```dockerfile
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -265,12 +288,14 @@ CMD ["nginx", "-g", "daemon off;"]
 **nginx.conf:** `location / { try_files $uri /index.html; }`, `location /api/ { proxy_pass http://backend:8000/api/; ... }`, gzip, `client_max_body_size`.
 
 ## 10. Сценарий развёртывания (локально)
+
 ```bash
 # dev: backend (uvicorn) + frontend (npm run dev)
 docker compose up --build  # единый стек: http://localhost/
 ```
 
 ## 11. Acceptance-критерии фронтенда
+
 - [ ] Загрузка CSV/JSON, предпросмотр работает.
 - [ ] Валидация минимального набора полей с понятным сообщением.
 - [ ] Батч-обработка через `/api/v1/extract/batch`, прогресс.
@@ -285,6 +310,7 @@ docker compose up --build  # единый стек: http://localhost/
 - [ ] Базовый режим не ломается при `degraded`.
 
 ## 12. Нефункциональные требования фронтенда
+
 - Производительность: батч N<=50 без заметных лагов (виртуализация не требуется для MVP).
 - Надёжность: валидация + обработка сетевых ошибок.
 - Типобезопасность: строгий TypeScript, общие типы с API.

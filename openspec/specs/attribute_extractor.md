@@ -1,14 +1,17 @@
 # Спецификация: Модуль извлечения атрибутов (Attribute Extractor)
 
 ## 1. Назначение
+
 Специфицировать ядро пайплайна извлечения характеристик товаров из текста карточки (title, description, seller_attributes). Модуль отвечает за извлечение, нормализацию, валидацию grounding, расчёт уверенности и формирование структурированного результата. Реализуется по принципу гибридного каскада (rules-first, cheap-first) с жёстким требованием «не выдумывать характеристики».
 
 ## 2. Область применения
+
 Пайплайн проходит путь: входная карточка → препроцессинг → извлечение кандидатами (экстракторы) → мёржинг → валидация (grounding) → нормализация → агрегация уверенности → фильтрация по порогам → выходной результат. Модуль является основным вычислительным компонентом бэкенда (Python + FastAPI).
 
 ## 3. Интерфейсы и контракты
 
 ### 3.1 Интерфейс BaseExtractor
+
 ```python
 from abc import ABC, abstractmethod
 from typing import List
@@ -27,17 +30,21 @@ class BaseExtractor(ABC):
         """Поддерживает ли экстрактор данный атрибут/категорию."""
         return True
 ```
+
 **Требования**: каждый экстрактор возвращает список `AttributeCandidate` с заполненными `extraction_method`, `confidence`, `is_confirmed_in_text`, `source_spans`/`evidence_text` (где возможно).
 
 ### 3.2 Ключевые DTO (структуры)
+
 Используются доменные сущности (domain-model.md): `ProductCard`, `AttributeCandidate`, `ExtractionResult`, `CategorySchema`, `Span`.
 
 ### 3.3 Регистрация экстракторов
+
 `ExtractorRegistry` хранит список экстракторов, сортирует по `priority` (ascending). Порядок запуска по умолчанию: Rule(priority 0), Dict(1), NER(10), Classifier(20), Transformer(30), LLM(50) — конфигурируемо.
 
 ## 4. Этапы пайплайна (детально)
 
 ### Этап 0. Препроцессинг
+
 - **Сбор текста**: `raw_text = " ".join(filter(None, [card.title, card.description, str(card.seller_attributes)]))`
 - **Нормализация**: сжатие множественных пробелов, унификация переносов, удаление мусорных символов (опц.), нормализация кавычек.
 - **Язык**: автоопределение (ru/en/mixed) — опц., влияет на словари/нормализаторы.
@@ -45,13 +52,16 @@ class BaseExtractor(ABC):
 - **Резолв схемы**: загрузка `CategorySchema` по `category_id/name` (fallback: generic schema).
 
 ### Этап 1. Rules + Dicts (ядро, детерминированное)
+
 **RuleExtractor (priority 0)**:
+
 - Регулярные выражения для числовых значений с единицами: диагональ (`(\d+[.,]?\d*)\s*(дюйм|inch|"|″)`), объём памяти (`(\d+)\s*(ГБ|Гб|GB|ТБ|Тб|TB)`), ОЗУ (`(\d+)\s*(ГБ|GB|RAM)`), ёмкость батареи (`(\d+)\s*(мА·ч|мАч|mAh|mA·h)`), накопитель и др.
 - Шаблоны ключевых фраз («цвет: чёрный», «диагональ экрана — 6,7 дюйма»).
 - Экстракция бренда/модели по маркерам (словари + контекст).
 - Возвращает кандидатов с `extraction_method='rule'`, `confidence` 0.90–0.99 (высокая для точных шаблонов), `source_spans` по совпадению.
 
 **DictExtractor (priority 1)**:
+
 - Точный/частичный поиск по `synonyms_map` (alias→canonical) и `vocab` (enum). Приоритет точному совпадению (boundary-aware), затем словарному.
 - BrandVocab: поиск бренда с boundary (слова), исключение стоп-слов, уменьшение ложных срабатываний.
 - Цвет, материал, форм-факторы — enum-словари.
@@ -60,23 +70,29 @@ class BaseExtractor(ABC):
 **Требования**: boundary-aware (не захватывать часть другого слова), регистронезависимый с учётом рус/англ, нормализация пробелов.
 
 ### Этап 2. ML-экстракторы (локальные)
+
 **NERExtractor (priority 10)**:
+
 - Token-level NER (BIO/BILOU) для сущностей: `BRAND`, `MODEL`, `STORAGE_GB`, `DIAGONAL_INCH`, `BATTERY_MAH`, `RAM_GB`, `DRIVE_GB`, `PROCESSOR`, `COLOR`.
 - Предобработка под модель (сплиттер/токенизатор). Постобработка: склейка сущностей, валидация чисел+единиц, нормализация.
 - `confidence` по softmax токенов (entity-level), типично 0.80–0.95.
 - Обязателен маппинг в `attribute_code`.
 
 **ClassifierExtractor (priority 20)**:
+
 - Малый классификатор (logreg/mini-transformer) для неоднозначных enum-атрибутов (цвет при наличии нескольких кандидатов, тип корпуса) по контекстному окну вокруг упоминания.
 - `confidence` = вероятность класса.
 
 **TransformerExtractor (priority 30)**:
+
 - Encoder (BERT/RoBERTa/ModernBERT) — sequence tagging (token classification) или extractive QA («какой объём памяти?») под схему категории.
 - Сильнее на длинном хвосте, возвращает спаны + уверенность span-level.
 - Локальный инференс, управляемая стоимость.
 
 ### Этап 3. LLM-экстрактор (резервный)
+
 **LLMExtractor (priority 50)**:
+
 - **Режим**: zero-shot/few-shot. Включается только если `ENABLE_LLM=true` и имеются незакрытые обязательные атрибуты схемы И/ИЛИ кандидаты с `confidence < threshold` после этапов 1–2.
 - **Строгая схема вывода (JSON Schema)** — принудительная типизация. Обязательные поля: `attribute_code`, `raw_value`, `normalized_value`, `confidence` [0,1], `evidence_text` (обязателен), `source_field` (`title|description|seller_attributes`), `is_confirmed_in_text` (bool).
 - **Hard constraints (промпт)**:
@@ -92,18 +108,21 @@ class BaseExtractor(ABC):
 - **Правило активации LLM (gate)**: не вызывать для каждой карточки по умолчанию. Активация по условию: есть незакрытые `required_attributes` категории ИЛИ кандидаты с `confidence < default_threshold` после этапов 1–2. Глобальный флаг `ENABLE_LLM`.
 
 ### Этап 4. Candidate Merging (объединение кандидатов)
+
 - Группировка по `(attribute_code, normalized_value)`. При равных — сливаем.
 - При разных `normalized_value` для одного `attribute_code` (конфликт): приоритет grounded + вес метода (rule/dict > NER/Trans > LLM), при обоих grounded — не объединяем, понижаем confidence, возможен `needs_review=true`.
 - **Взвешенная агрегация confidence** при слиянии: `conf_agg = (∑ w_m * conf_m * g_m) / (∑ w_m * g_m)`, где `g_m=1.0` если `is_confirmed_in_text` true.
 - **Метод-веса (рекомендуемые)**: `rule=1.00`, `dict=0.98`, `ner=0.90`, `classifier=0.90`, `ml_transformer=0.92`, `llm=0.85` (конфигурируемы).
 
 ### Этап 5. Grounding Validation (обязательный фильтр)
+
 - **Hard constraint**: для всех финальных кандидатов `is_confirmed_in_text == true`.
 - Проверка: `evidence_text` или ключевые токены присутствуют в `card.title`/`card.description`/`seller_attributes` (case-insensitive, нормализация пробелов, числовое/единичное совпадение `6,7` vs `6.7`, `ГБ` vs `GB`).
 - Кандидаты без подтверждения **отбрасываются**.
 - Сохраняем `source_spans` (минимум одно упоминание).
 
 ### Этап 6. Нормализация значений
+
 - Базовая: trim, collapse spaces, нормализация кавычек, дефисов.
 - Регистр: бренды — канонический из BrandVocab, enum — канонический из vocab, остальное — опц. Title Case.
 - Синонимы: `synonyms_map` alias→canonical.
@@ -112,6 +131,7 @@ class BaseExtractor(ABC):
 - `unit_value`: парсинг числа+единицы, нормализация, форматирование (напр. `256 ГБ`, `6,7 дюйма`, `5000 мА·ч`).
 
 ### Этап 7. Confidence, пороги, статус
+
 - Финальный `confidence` = взвешенная агрегация после мёржа + штрафы: `enum_out_of_vocab` (-0.15, если не strict), `conflicting_values` (-0.10), `weak_evidence` (-0.05).
 - Пороги: `default_threshold_auto = 0.80`, `default_threshold_review = 0.60`, приоритет per-attribute.
 - Логика:
@@ -124,19 +144,22 @@ class BaseExtractor(ABC):
 - Coverage: доля обязательных атрибутов категории, извлечённых с `confidence >= T_review` (или присутствующих).
 
 ### Этап 8. Пост-фильтрация и дедупликация
+
 - Удаление дублей по `(attribute_code, normalized_value)`.
 - `allow_multiple == false` → оставить лучший по confidence.
 - Исключить кандидатов с `is_confirmed_in_text == false`.
 - `enum_strict == true` + значение вне vocab (не замаппилось) → отбрасываем.
 
 ### Этап 9. Формирование результата
+
 - `ExtractionResult.attributes` = финальный список (отсортирован по `attribute_code`).
 - Заполнить `pipeline_version`, `processing_time_ms`, `low_confidence_count`, `needs_review`, `status`.
 - Обязательные поля: `extraction_method`, `is_confirmed_in_text=true`, `normalized_value`, `confidence`, `source_spans` (>=1).
 
 ## 6. Обработка граничных случаев
+
 | Случай | Поведение | Статус |
-|---|---|---|
+| --- | --- | --- |
 | Текст пустой/недостаточный | Нет возможности подтвердить значения в тексте. Возвращаем пустой список. `needs_review=true`. | `skipped` |
 | Категория не определена | Применяем generic-схему. Сохраняем `category_id/category_name` из входа при наличии. | `ok`/`partial` |
 | Схема категории отсутствует | Применяем минимальную схему по умолчанию. Не блокируем обработку. | `partial` |
@@ -157,6 +180,7 @@ class BaseExtractor(ABC):
 ## 7. Тестирование модуля
 
 ### 7.1 Unit-тесты
+
 - RuleExtractor: парсинг единиц, шаблоны, boundary-aware, форматы чисел.
 - DictExtractor: точное/частичное, синонимы, BrandVocab (стоп-слова), регистронезависимость.
 - NERExtractor: BIO, склейка, постнормализация, маппинг в attribute_code.
@@ -166,6 +190,7 @@ class BaseExtractor(ABC):
 - Confidence/Thresholds: пороги, штрафы, `needs_review`, `status`.
 
 ### 7.2 Integration-тесты
+
 - Каскад cheap-first: rules закрывают ядро, ML дополняет, LLM не вызывается при достаточном покрытии.
 - Grounding hard-filter: LLM-кандидат без подтверждения отбрасывается.
 - Батч: частично успешный батч не прерывает остальные.
@@ -174,12 +199,14 @@ class BaseExtractor(ABC):
 - CategorySchema: required/optional, allow_multiple.
 
 ### 7.3 Contract-тесты
+
 - Соответствие `AttributePrediction`/`ExtractionResponseItem` (api_contract.md).
 - Обязательные поля: `attribute_code`, `normalized_value`, `confidence`, `extraction_method`, `is_confirmed_in_text`.
 - `confidence` ∈ [0.0,1.0].
 - `is_confirmed_in_text == true` во всех финальных атрибутах.
 
 ### 7.4 Приёмочные тест-кейсы
+
 - Смартфон: бренд, модель, объём памяти, диагональ экрана, ёмкость батареи, цвет.
 - Ноутбук: бренд, процессор, объём ОЗУ, накопитель, диагональ экрана, цвет.
 - Редкая категория: проверка без массовых правил, активация LLM только при необходимости.
@@ -187,8 +214,9 @@ class BaseExtractor(ABC):
 - Микс RU/EN: корректная нормализация.
 
 ## 8. Метрики качества модуля
+
 | Метрика | Описание | Способ расчёта |
-|---|---|---|
+| --- | --- | --- |
 | Precision | Доля корректно извлечённых среди извлечённых | TP/(TP+FP) по (product_id, attribute_code) на эталоне |
 | Recall | Доля корректно извлечённых среди истинных | TP/(TP+FN) по (product_id, attribute_code) на эталоне |
 | F1 | Гармоническое среднее P/R | 2*P*R/(P+R) |
@@ -207,12 +235,14 @@ class BaseExtractor(ABC):
 ## 9. Мониторинг, логирование, трассировка
 
 ### 9.1 Логирование
+
 - Уровни: INFO (ключевые этапы каскада), DEBUG (детали кандидатов), WARNING (fallbacks/degraded), ERROR (failures).
 - Структурные логи (JSON) в prod-подобном режиме: `product_id`, `category`, `pipeline_version`, `stages`, `methods_used`, `llm_called`, `candidates_before_grounding`, `candidates_after_grounding`, `processing_time_ms`, `needs_review`.
 - Без PII: не логировать полный сырой текст; допустимы `text_hash`, длина, первые N символов title.
 - Секреты: никогда не логировать `LLM_API_KEY`, заголовки авторизации.
 
 ### 9.2 Метрики (runtime)
+
 - `extract_requests_total{method="single|batch"}`
 - `extract_duration_ms{stage="preprocess|rules|dict|ner|classifier|transformer|llm|merge|normalize|total"}`
 - `candidates_total{method,attribute_code}`
@@ -225,12 +255,14 @@ class BaseExtractor(ABC):
 - `degraded_mode{component="ner|transformer|llm"}`
 
 ### 9.3 Трассировка
+
 - `pipeline_version` в каждом ответе API.
 - `extraction_method`, `source_spans`, `evidence_text` для каждого финального кандидата.
 - Тайминги по этапам.
 - Версии моделей: `ner_model_version`, `transformer_model_version`, `llm_model`, `vocab_version`, `rules_version`.
 
 ### 9.4 Алерты (рекомендуемые)
+
 - Резкий рост `needs_review` (>X%) за окно.
 - Увеличение доли отфильтрованных grounding (>Y%) при включённом LLM.
 - Рост `llm_errors_total`/таймаутов.
@@ -238,6 +270,7 @@ class BaseExtractor(ABC):
 - Долгая инициализация моделей при старте (>Z сек).
 
 ## 10. Принципы реализации
+
 - KISS + модульность: каждый экстрактор изолирован.
 - Cheap-first каскад: дорогие компоненты только при gate (coverage < 1.0 по required или low_confidence).
 - Grounding как инвариант: никогда не выпускать кандидата с `is_confirmed_in_text == false`. Фильтрация после каждого источника (особенно LLM).

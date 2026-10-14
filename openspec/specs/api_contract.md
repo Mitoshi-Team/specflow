@@ -1,11 +1,13 @@
 # Спецификация: API-контракт
 
 ## 1. Назначение
+
 Описать REST API сервиса извлечения атрибутов (Attribute Extractor Service). API предназначен для пакетной и одиночной обработки карточек товаров, получения схем атрибутов по категориям, проверки здоровья сервиса и получения информации о конфигурации.
 
 Стек: Python + FastAPI. Формат — JSON. Все эндпоинты валидируются через Pydantic.
 
 ## 2. Общие принципы
+
 - **Base URL**: `/api/v1`
 - **Формат**: `application/json`
 - **Коды ответов**: 200, 400, 422, 429, 500
@@ -19,6 +21,7 @@
 ## 3. Модели запросов/ответов (Pydantic)
 
 ### 3.1 ProductCardRequest
+
 ```json
 {
   "product_id": "string (optional)",
@@ -30,9 +33,11 @@
   "language": "string (optional, e.g. 'ru'|'en'|'mixed')"
 }
 ```
+
 **Правило валидации:** хотя бы одно из полей (`title`, `description`, `seller_attributes`) должно быть непустым.
 
 ### 3.2 AttributePrediction
+
 ```json
 {
   "attribute_code": "string",
@@ -47,9 +52,11 @@
   "is_confirmed_in_text": true
 }
 ```
+
 **Ограничения:** `confidence` ∈ [0.0,1.0], `is_confirmed_in_text == true` в финальном ответе.
 
 ### 3.3 ExtractionResponseItem
+
 ```json
 {
   "product_id": "string (optional)",
@@ -65,6 +72,7 @@
 ```
 
 ### 3.4 BatchExtractRequest
+
 ```json
 {
   "items": [ProductCardRequest],
@@ -75,9 +83,11 @@
   "threshold_override": 0.8
 }
 ```
+
 **Ограничения:** `batch_size` ∈ [1,50].
 
 ### 3.5 BatchExtractResponse
+
 ```json
 {
   "batch_id": "string (optional)",
@@ -91,6 +101,7 @@
 ```
 
 ### 3.6 CategorySchema
+
 ```json
 {
   "category": "string",
@@ -102,6 +113,7 @@
 ```
 
 ### 3.7 HealthResponse
+
 ```json
 {
   "status": "ok|degraded|down",
@@ -114,6 +126,7 @@
 ```
 
 ### 3.8 ErrorResponse
+
 ```json
 {
   "detail": "string",
@@ -125,24 +138,31 @@
 ## 4. Эндпоинты
 
 ### 4.1 POST `/api/v1/extract` — одиночное извлечение
+
 **Request:** `ProductCardRequest` → **Response:** `ExtractionResponseItem` (200). Ошибки: 422, 500.
 
 ### 4.2 POST `/api/v1/extract/batch` — пакетное извлечение
+
 **Request:** `BatchExtractRequest` → **Response:** `BatchExtractResponse` (200). Ошибки: 400, 422, 500.
 Особенности: `return_sources` (по умолчанию true), `threshold_override` (временное переопределение порога).
 
 ### 4.3 GET `/api/v1/categories` — список категорий со схемами
+
 **Query:** `category` (опц.), `limit` (int, default=50, max=200), `offset` (int, default=0)
 **Response:** `{"items": [CategorySchema], "total": 100}` (200)
 
 ### 4.4 GET `/api/v1/categories/{category}` — схема конкретной категории
+
 **Response:** `CategorySchema` (200), 404 если не найдена.
 
 ### 4.5 GET `/api/v1/health` — проверка работоспособности
+
 **Response:** `HealthResponse` (200). `degraded` — часть компонентов не загружена, но базовый пайплайн (rules) доступен. `down` — критическая ошибка инициализации.
 
 ### 4.6 GET `/api/v1/info` — информация о сервисе
+
 **Response (200):**
+
 ```json
 {
   "service_name": "attribute-extractor",
@@ -163,9 +183,11 @@
 ```
 
 ### 4.7 GET `/api/v1/config` — конфигурация (read-only)
+
 **Response (200):** `confidence_thresholds`, `method_weights`, `hybrid_strategy`, `llm_enabled` (bool).
 
 ## 5. Нефункциональные требования API
+
 - **Производительность:** stateless, горизонтально масштабируемый. Приоритет дешёвых путей (rules/NER).
 - **Надёжность:** graceful degradation — при недоступности тяжёлых компонентов использовать fallback с корректным `status`.
 - **Безопасность:** валидация входа, отсутствие логирования PII в сыром виде, read-only конфиги без секретов. Секреты (LLM API-ключи) — только через переменные окружения.
@@ -174,6 +196,7 @@
 - **Ограничения:** защита от слишком больших описаний (soft-limit) с понятной 422-ошибкой.
 
 ## 6. Допущения и особенности
+
 - **Grounding обязателен:** API никогда не возвращает `is_confirmed_in_text=false` в успешном финальном ответе. Неподтверждённые кандидаты отфильтровываются.
 - **Low confidence handling:** значения с `confidence < threshold` остаются в `attributes` с полями; `needs_review=true`, `status = low_confidence/partial`.
 - **Частичные результаты:** `partial` — часть обязательных атрибутов категории не извлечена.

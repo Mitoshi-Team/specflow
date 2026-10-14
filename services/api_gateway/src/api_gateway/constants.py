@@ -4,7 +4,7 @@
 в нескольких местах, выносятся сюда, чтобы не дублировать их в бизнес-логике.
 """
 
-API_PREFIX = "/api"
+API_PREFIX = "/api/v1"
 """Префикс, под которым публикуются все маршруты шлюза."""
 
 HEALTH_ENDPOINT = "/health"
@@ -12,3 +12,9 @@ HEALTH_ENDPOINT = "/health"
 
 DEFAULT_CORS_ORIGINS = ["http://localhost", "http://localhost:5173"]
 """Источники, разрешённые по умолчанию для локальной разработки."""
+
+DEFAULT_EXTRACTOR_URL = "http://attribute_extractor:8001"
+"""Базовый URL сервиса извлечения атрибутов внутри docker-сети."""
+
+DEFAULT_UPSTREAM_TIMEOUT_SECONDS = 60.0
+"""Таймаут запросов к сервису извлечения атрибутов, в секундах."""

@@ -24,6 +24,11 @@ services:
     build:
       context: .
       dockerfile: services/api_gateway/Dockerfile
+    # Конфигурация читается из .env (см. .env.example). Файл опционален,
+    # чтобы сборка работала и без него — тогда используются значения по умолчанию.
+    env_file:
+      - path: .env
+        required: false
     environment:
       API_GATEWAY_CORS_ORIGINS: ${API_GATEWAY_CORS_ORIGINS:-["http://localhost","http://localhost:5173"]}
       API_GATEWAY_ATTRIBUTE_EXTRACTOR_URL: http://attribute_extractor:8001
@@ -35,4 +40,7 @@ services:
     build:
       context: .
       dockerfile: services/attribute_extractor/Dockerfile
+    env_file:
+      - path: .env
+        required: false
     restart: unless-stopped

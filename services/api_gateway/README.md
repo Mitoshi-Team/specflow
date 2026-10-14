@@ -21,4 +21,4 @@ uv run uvicorn api_gateway.main:app --reload
 
 | Метод | Путь | Описание |
 | --- | --- | --- |
-| GET | `/api/health` | Проверка работоспособности |
+| GET | `/api/v1/health` | Проверка работоспособности |

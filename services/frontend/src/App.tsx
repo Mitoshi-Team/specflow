@@ -12,7 +12,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
 
-    fetch(`${API_BASE_URL}/api/health`)
+    fetch(`${API_BASE_URL}/api/v1/health`)
       .then((response): ApiStatus => (response.ok ? "ok" : "error"))
       .catch((): ApiStatus => "error")
       .then((next) => {

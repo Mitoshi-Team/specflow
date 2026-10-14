@@ -21,7 +21,7 @@ uv run uvicorn attribute_extractor.main:app --port 8001 --reload
 
 | Метод | Путь | Описание |
 | --- | --- | --- |
-| GET | `/api/health` | Проверка работоспособности |
+| GET | `/api/v1/health` | Проверка работоспособности |
 
 В docker-сети сервис доступен API Gateway по адресу
 `http://attribute_extractor:8001`.

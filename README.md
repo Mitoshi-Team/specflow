@@ -186,6 +186,7 @@ cd services/frontend
 npm install
 npm run dev        # dev-сервер Vite (http://localhost:5173)
 npm run build      # проверка типов и production-сборка
+npm test           # unit-тесты (vitest)
 ```
 
 Если нужно сбросить окружение: удалите `.venv` и выполните `uv sync` заново.

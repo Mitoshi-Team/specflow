@@ -7,6 +7,7 @@ members = [
     "api-gateway",
     "attribute-extractor",
     "specflow",
+    "specflow-contracts",
 ]
 
 [[package]]
@@ -48,6 +49,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pydantic-settings" },
+    { name = "specflow-contracts" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -56,6 +58,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "pydantic-settings", specifier = ">=2.7" },
+    { name = "specflow-contracts", editable = "services/contracts" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
 
@@ -67,6 +70,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pydantic-settings" },
+    { name = "specflow-contracts" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -75,6 +79,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "pydantic-settings", specifier = ">=2.7" },
+    { name = "specflow-contracts", editable = "services/contracts" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
 
@@ -536,6 +541,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "api-gateway" },
     { name = "attribute-extractor" },
+    { name = "specflow-contracts" },
 ]
 
 [package.dev-dependencies]
@@ -549,6 +555,7 @@ dev = [
 requires-dist = [
     { name = "api-gateway", editable = "services/api_gateway" },
     { name = "attribute-extractor", editable = "services/attribute_extractor" },
+    { name = "specflow-contracts", editable = "services/contracts" },
 ]
 
 [package.metadata.requires-dev]
@@ -557,6 +564,17 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "ruff", specifier = ">=0.16" },
 ]
+
+[[package]]
+name = "specflow-contracts"
+version = "0.1.0"
+source = { editable = "services/contracts" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.10" }]
 
 [[package]]
 name = "starlette"

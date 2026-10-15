@@ -82,7 +82,8 @@ specflow/
 └── services/
     ├── frontend/             # React + TypeScript + Vite (i18next)
     ├── api_gateway/          # FastAPI — публичный API
-    └── attribute_extractor/  # FastAPI — извлечение атрибутов
+    ├── attribute_extractor/  # FastAPI — извлечение атрибутов
+    └── contracts/            # общие доменные модели и Pydantic-схемы
 ```
 
 Запросы снаружи приходят на nginx (порт 80): `/` проксируется на фронтенд,
@@ -127,7 +128,8 @@ uv sync
 ```
 
 Команда создаёт общее виртуальное окружение `.venv` и устанавливает оба сервиса
-(`api_gateway`, `attribute_extractor`) вместе с dev-зависимостями (ruff, pytest).
+(`api_gateway`, `attribute_extractor`), общий пакет контрактов
+(`specflow_contracts`) вместе с dev-зависимостями (ruff, pytest).
 
 ### 5. Запустите docker
 

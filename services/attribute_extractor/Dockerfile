@@ -10,8 +10,10 @@ WORKDIR /app
 
 # Манифесты всех участников workspace нужны, чтобы uv разрешил общий lock-файл.
 COPY pyproject.toml uv.lock ./
+COPY services/contracts/pyproject.toml services/contracts/
 COPY services/api_gateway/pyproject.toml services/api_gateway/
 COPY services/attribute_extractor/pyproject.toml services/attribute_extractor/
+COPY services/contracts/src services/contracts/src
 COPY services/attribute_extractor/src services/attribute_extractor/src
 
 RUN uv sync --frozen --no-dev --package attribute-extractor

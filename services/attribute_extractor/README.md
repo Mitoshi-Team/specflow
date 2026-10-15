@@ -9,6 +9,11 @@
   уверенности, веса методов, лимиты батча, таймауты и версии с валидацией.
 - `src/attribute_extractor/constants.py` — значения по умолчанию и доменные
   константы пайплайна (пороги, штрафы, веса методов, версии, таймауты).
+- `src/attribute_extractor/preprocessing.py` — препроцессинг карточки (Этап 0):
+  сбор `raw_text`, нормализация текста, определение языка, токенизация и резолв
+  `CategorySchema` с fallback на generic-схему.
+- `src/attribute_extractor/extractors/` — базовый класс `BaseExtractor`, реестр
+  `ExtractorRegistry` и скелеты экстракторов каскада.
 - `tests/` — unit-тесты.
 
 ## Запуск

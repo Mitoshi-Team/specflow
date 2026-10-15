@@ -6,14 +6,6 @@
     "home": "Home",
     "results": "Results"
   },
-  "health": {
-    "label": "API status",
-    "loading": "checking…",
-    "ok": "available",
-    "degraded": "degraded",
-    "down": "unavailable",
-    "error": "no connection"
-  },
   "pages": {
     "home": {
       "title": "Attribute extraction",
@@ -21,7 +13,8 @@
     },
     "results": {
       "title": "Results",
-      "description": "Batch processing results for product cards."
+      "description": "Batch processing results for product cards.",
+      "empty": "Results will appear after a batch is processed."
     }
   },
   "api": {
@@ -33,12 +26,11 @@
   },
   "fileUpload": {
     "inputLabel": "Product cards file selection",
-    "idle": "Drag a file here or choose one",
-    "dragging": "Drop the file to upload",
+    "idle": "Click to choose a file",
     "parsing": "Processing file…",
     "success": "File “{{name}}” uploaded",
     "cardCount": "Cards: {{total}}",
-    "hint": "CSV, JSON and TSV are supported",
+    "hint": "CSV, JSON and TSV supported, up to {{size}}",
     "clear": "Remove file",
     "row": "Row {{row}}",
     "errors": {
@@ -51,6 +43,24 @@
       "invalidSellerAttributes": "Invalid JSON in the seller_attributes field",
       "noContent": "The row has no title, description or seller_attributes",
       "noCards": "The file contains no cards"
+    }
+  },
+  "upload": {
+    "title": "Upload cards"
+  },
+  "preview": {
+    "title": "Data preview",
+    "emptyField": "field is empty",
+    "expand": "Show full value",
+    "collapse": "Collapse",
+    "shown": "Showing the first {{shown}} of {{total}} cards",
+    "columns": {
+      "number": "#",
+      "productId": "Product ID",
+      "title": "Title",
+      "description": "Description",
+      "attributes": "Seller attributes",
+      "action": "Row actions"
     }
   }
 }

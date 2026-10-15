@@ -5,9 +5,6 @@
  * «магические числа» inline (см. rules.md).
  */
 
-/** Интервал периодической проверки работоспособности API (`/health`), в мс. */
-export const API_HEALTH_POLL_INTERVAL_MS = 30_000;
-
 /** Расширения файлов, принимаемых загрузчиком карточек (frontend.md, 6.3). */
 export const ACCEPTED_FILE_EXTENSIONS = [".csv", ".json", ".tsv"] as const;
 
@@ -26,3 +23,9 @@ export const TSV_DELIMITER = "\t";
  * (`client_max_body_size`).
  */
 export const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Сколько первых строк файла показывать в предпросмотре
+ * (frontend.md, 9.2: `VITE_MAX_PREVIEW`, по умолчанию 20).
+ */
+export const PREVIEW_MAX_ROWS = 20;

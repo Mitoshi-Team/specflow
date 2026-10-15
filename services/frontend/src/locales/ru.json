@@ -52,5 +52,24 @@
       "noContent": "Строка не содержит title, description или seller_attributes",
       "noCards": "В файле нет карточек"
     }
+  },
+  "dataPreview": {
+    "title": "Предпросмотр данных",
+    "empty": "Нет данных для предпросмотра",
+    "emptyValue": "—",
+    "rowCount": "Показано {{shown}} из {{total}}",
+    "columns": {
+      "product_id": "ID товара",
+      "title": "title",
+      "description": "description",
+      "seller_attributes": "seller_attributes"
+    },
+    "validation": {
+      "present": "есть",
+      "missing": "нет",
+      "allPresent": "Все обязательные поля присутствуют",
+      "missingFields": "Отсутствуют поля: {{fields}}",
+      "noContent": "В данных нет ни одного из полей title, description или seller_attributes"
+    }
   }
 }

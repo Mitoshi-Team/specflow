@@ -15,6 +15,7 @@ import {
   TSV_DELIMITER,
 } from "../constants";
 import type { ProductCardRequest, SellerAttributes } from "../schemas/api";
+import { hasRequiredContent } from "./inputValidation";
 
 /** Поддерживаемые форматы входных файлов. */
 export type FileFormat = "csv" | "json" | "tsv";
@@ -80,17 +81,6 @@ function normalizeText(value: unknown): string | undefined {
   return trimmed === "" ? undefined : trimmed;
 }
 
-/** Минимум одно непустое из title | description | seller_attributes. */
-function hasContent(card: ProductCardRequest): boolean {
-  if (card.title || card.description) {
-    return true;
-  }
-  return (
-    card.seller_attributes !== undefined &&
-    Object.keys(card.seller_attributes).length > 0
-  );
-}
-
 /**
  * Определяет формат по расширению имени файла. Расширение в спецификации
  * считается опциональным признаком, поэтому неизвестное расширение — это
@@ -150,7 +140,7 @@ function csvRowToCard(row: Record<string, string>): CardResult {
     card.language = language;
   }
 
-  if (!hasContent(card)) {
+  if (!hasRequiredContent(card)) {
     return { ok: false, error: { code: "noContent" } };
   }
   return { ok: true, card };
@@ -209,7 +199,7 @@ function jsonItemToCard(item: Record<string, unknown>): CardResult {
     card.seller_attributes = sellerAttributes;
   }
 
-  if (!hasContent(card)) {
+  if (!hasRequiredContent(card)) {
     return { ok: false, error: { code: "noContent" } };
   }
   return { ok: true, card };

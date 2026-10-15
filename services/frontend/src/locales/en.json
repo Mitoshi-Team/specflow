@@ -52,5 +52,24 @@
       "noContent": "The row has no title, description or seller_attributes",
       "noCards": "The file contains no cards"
     }
+  },
+  "dataPreview": {
+    "title": "Data preview",
+    "empty": "No data to preview",
+    "emptyValue": "—",
+    "rowCount": "Showing {{shown}} of {{total}}",
+    "columns": {
+      "product_id": "Product ID",
+      "title": "title",
+      "description": "description",
+      "seller_attributes": "seller_attributes"
+    },
+    "validation": {
+      "present": "present",
+      "missing": "missing",
+      "allPresent": "All required fields are present",
+      "missingFields": "Missing fields: {{fields}}",
+      "noContent": "The data has none of the title, description or seller_attributes fields"
+    }
   }
 }

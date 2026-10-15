@@ -5,8 +5,10 @@
 ## Устройство
 
 - `src/api_gateway/main.py` — фабрика приложения `create_app()` и объект `app`.
-- `src/api_gateway/config.py` — настройки (`API_GATEWAY_*`).
-- `src/api_gateway/constants.py` — константы маршрутов и CORS.
+- `src/api_gateway/config.py` — настройки Pydantic (`API_GATEWAY_*`): версии,
+  порог уверенности, лимиты батча и таймауты upstream с валидацией.
+- `src/api_gateway/constants.py` — значения по умолчанию (маршруты, CORS,
+  версии, пороги, лимиты, таймауты).
 - `tests/` — unit-тесты.
 
 ## Запуск

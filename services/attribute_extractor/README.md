@@ -5,8 +5,10 @@
 ## Устройство
 
 - `src/attribute_extractor/main.py` — фабрика приложения `create_app()` и объект `app`.
-- `src/attribute_extractor/config.py` — настройки (`EXTRACTOR_*`).
-- `src/attribute_extractor/constants.py` — константы маршрутов.
+- `src/attribute_extractor/config.py` — настройки Pydantic (`EXTRACTOR_*`): пороги
+  уверенности, веса методов, лимиты батча, таймауты и версии с валидацией.
+- `src/attribute_extractor/constants.py` — значения по умолчанию и доменные
+  константы пайплайна (пороги, штрафы, веса методов, версии, таймауты).
 - `tests/` — unit-тесты.
 
 ## Запуск

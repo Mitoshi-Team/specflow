@@ -1,12 +1,27 @@
 {
   "app": {
-    "title": "SpecFlow",
-    "subtitle": "Extracting product attributes from specifications",
-    "apiStatus": "API status",
-    "status": {
-      "loading": "checking…",
-      "ok": "available",
-      "error": "unavailable"
+    "title": "SpecFlow"
+  },
+  "nav": {
+    "home": "Home",
+    "results": "Results"
+  },
+  "health": {
+    "label": "API status",
+    "loading": "checking…",
+    "ok": "available",
+    "degraded": "degraded",
+    "down": "unavailable",
+    "error": "no connection"
+  },
+  "pages": {
+    "home": {
+      "title": "Attribute extraction",
+      "description": "Upload product cards and run batch processing."
+    },
+    "results": {
+      "title": "Results",
+      "description": "Batch processing results for product cards."
     }
   },
   "api": {

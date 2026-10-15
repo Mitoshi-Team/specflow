@@ -14,6 +14,12 @@
   `CategorySchema` с fallback на generic-схему.
 - `src/attribute_extractor/extractors/` — базовый класс `BaseExtractor`, реестр
   `ExtractorRegistry` и скелеты экстракторов каскада.
+- `src/attribute_extractor/merging.py` — объединение кандидатов атрибутов (Этап 4):
+  группировка по `(attribute_code, normalized_value)`, взвешенная агрегация
+  уверенности с учётом подтверждения и разрешение конфликтов значений.
+- `src/attribute_extractor/grounding.py` — проверка подтверждения кандидатов в
+  тексте карточки (Этап 5): сопоставление `evidence_text`/токенов значения с
+  полями карточки (числа `6,7` ↔ `6.7`, единицы `ГБ` ↔ `GB`).
 - `tests/` — unit-тесты.
 
 ## Запуск

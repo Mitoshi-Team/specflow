@@ -23,35 +23,21 @@ function fakeFile(name: string): File {
 }
 
 describe("FileUpload", () => {
-  it("в состоянии ожидания показывает приглашение", () => {
+  it("в состоянии ожидания показывает приглашение выбрать файл", () => {
     renderUpload();
 
     expect(screen.getByRole("status").textContent).toContain(
-      "Перетащите файл сюда или выберите его",
+      "Нажмите, чтобы выбрать файл",
     );
   });
 
-  it("переключается в состояние перетаскивания", () => {
-    const { dropzone } = renderUpload();
-
-    fireEvent.dragEnter(dropzone);
-    expect(screen.getByRole("status").textContent).toContain(
-      "Отпустите файл, чтобы загрузить",
-    );
-
-    fireEvent.dragLeave(dropzone);
-    expect(screen.getByRole("status").textContent).toContain(
-      "Перетащите файл сюда или выберите его",
-    );
-  });
-
-  it("передаёт файл, сброшенный в зону", () => {
+  it("не поддерживает перетаскивание: drop не выбирает файл", () => {
     const { onFileSelect, dropzone } = renderUpload();
     const file = fakeFile("cards.csv");
 
     fireEvent.drop(dropzone, { dataTransfer: { files: [file] } });
 
-    expect(onFileSelect).toHaveBeenCalledWith(file);
+    expect(onFileSelect).not.toHaveBeenCalled();
   });
 
   it("передаёт файл, выбранный через input", () => {

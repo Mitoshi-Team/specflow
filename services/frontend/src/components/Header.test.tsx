@@ -1,47 +1,58 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import "../i18n";
-import { useApiHealth } from "../hooks/useApiHealth";
-import type { ApiHealthState } from "../hooks/useApiHealth";
 import Header from "./Header";
 
-vi.mock("../hooks/useApiHealth", () => ({
-  useApiHealth: vi.fn(),
-}));
-
-const useApiHealthMock = vi.mocked(useApiHealth);
-
-function renderHeader() {
+function renderHeader(path = "/") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <Header />
     </MemoryRouter>,
   );
 }
 
-beforeEach(() => {
-  useApiHealthMock.mockReset();
-});
-
-afterEach(() => {
-  cleanup();
-});
+afterEach(cleanup);
 
 describe("Header", () => {
-  it.each<[ApiHealthState, string]>([
-    ["loading", "проверяется…"],
-    ["ok", "доступен"],
-    ["degraded", "ограниченно"],
-    ["down", "недоступен"],
-    ["error", "нет связи"],
-  ])("показывает состояние API «%s» как «%s»", (state, expected) => {
-    useApiHealthMock.mockReturnValue(state);
-
+  it("показывает логотип с доступным именем", () => {
     renderHeader();
 
-    expect(screen.getByRole("status").textContent).toContain(expected);
+    const logo = screen.getByRole("img", { name: "SpecFlow" });
+    expect(logo.getAttribute("src")).toBe("/specflow_logo.svg");
+  });
+
+  it("показывает название текущего раздела рядом с логотипом", () => {
+    renderHeader("/");
+
+    expect(
+      screen.getByText("Извлечение атрибутов", {
+        selector: ".header__section",
+      }),
+    ).toBeDefined();
+  });
+
+  it("показывает название раздела на странице результатов", () => {
+    renderHeader("/results");
+
+    expect(
+      screen.getByText("Результаты", { selector: ".header__section" }),
+    ).toBeDefined();
+  });
+
+  it("показывает ссылки навигации по разделам", () => {
+    renderHeader();
+
+    expect(screen.getByRole("link", { name: "Главная" })).toBeDefined();
+    expect(screen.getByRole("link", { name: "Результаты" })).toBeDefined();
+  });
+
+  it("не показывает служебные индикаторы (версию пайплайна и статус API)", () => {
+    renderHeader();
+
+    expect(screen.queryByTitle("Версия пайплайна")).toBeNull();
+    expect(screen.queryByLabelText(/Статус API/)).toBeNull();
   });
 });

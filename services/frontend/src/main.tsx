@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import App from "./App";
 import "./i18n";
+import "./styles/tokens.css";
 import "./index.css";
 
 const rootElement = document.getElementById("root");

@@ -75,6 +75,7 @@
   },
   "preview": {
     "title": "Data preview",
+    "empty": "No data to preview",
     "emptyField": "field is empty",
     "expand": "Show full value",
     "collapse": "Collapse",
@@ -84,8 +85,15 @@
       "productId": "Product ID",
       "title": "Title",
       "description": "Description",
-      "attributes": "Seller attributes",
+      "seller_attributes": "Seller attributes",
       "action": "Row actions"
+    },
+    "validation": {
+      "present": "present",
+      "missing": "missing",
+      "allPresent": "All required fields are present",
+      "missingFields": "Missing fields: {{fields}}",
+      "noContent": "The data has none of the title, description or seller_attributes fields"
     }
   }
 }

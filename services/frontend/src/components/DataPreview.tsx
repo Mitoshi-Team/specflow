@@ -3,6 +3,13 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PREVIEW_MAX_ROWS } from "../constants";
+import {
+  REQUIRED_INPUT_FIELDS,
+  isFieldPresent,
+  validateInput,
+  type InputValidationResult,
+  type RequiredInputField,
+} from "../lib/inputValidation";
 import type { ProductCardRequest } from "../schemas/api";
 
 /**
@@ -14,41 +21,89 @@ const EXPAND_MIN_CHARS = 60;
 
 const EMPTY_VALUE = "—";
 
+/**
+ * Значение поля карточки для ячейки предпросмотра. Поле без содержимого
+ * (`isFieldPresent`) возвращает `undefined`, чтобы ячейка показала метку
+ * пустого значения, а не выглядела заполненной (design.md, раздел 7).
+ */
+function fieldCellValue(
+  card: ProductCardRequest,
+  field: RequiredInputField,
+): string | undefined {
+  if (!isFieldPresent(card, field)) {
+    return undefined;
+  }
+  if (field === "seller_attributes") {
+    return JSON.stringify(card.seller_attributes);
+  }
+  return card[field] ?? "";
+}
+
 function hasLongValue(card: ProductCardRequest): boolean {
   const values = [
     card.product_id,
-    card.title,
-    card.description,
-    card.seller_attributes === undefined
-      ? undefined
-      : JSON.stringify(card.seller_attributes),
+    ...REQUIRED_INPUT_FIELDS.map((field) => fieldCellValue(card, field)),
   ];
   return values.some(
     (value) => typeof value === "string" && value.length > EXPAND_MIN_CHARS,
   );
 }
 
+/**
+ * Ключ текста сводки валидации (i18n): перечень недостающих полей,
+ * подтверждение их наличия либо ошибка, когда нет ни одного обязательного
+ * поля (frontend.md, 6.3).
+ */
+function summaryKey(validation: InputValidationResult): string {
+  if (!validation.valid) {
+    return "preview.validation.noContent";
+  }
+  if (validation.missingFields.length > 0) {
+    return "preview.validation.missingFields";
+  }
+  return "preview.validation.allPresent";
+}
+
 export type DataPreviewProps = {
-  /** Полный список разобранных карточек; показываются первые N (PREVIEW_MAX_ROWS). */
+  /** Полный список разобранных карточек; показываются первые `maxRows`. */
   cards: ProductCardRequest[];
+  /**
+   * Результат валидации обязательных полей. По умолчанию считается из
+   * `cards` через `validateInput`, поэтому вызывающему коду достаточно
+   * передать карточки; проп нужен, когда результат уже посчитан снаружи
+   * (например, в тестах).
+   */
+  validation?: InputValidationResult;
+  /** Сколько первых строк показывать (по умолчанию `PREVIEW_MAX_ROWS`). */
+  maxRows?: number;
 };
 
 /**
  * Предпросмотр первых строк загруженного файла (design.md, раздел 7;
- * frontend.md, раздел 6.2 `DataPreview`).
+ * frontend.md, разделы 5.1, 6.2 `DataPreview`, 6.3).
  *
  * Длинные значения обрезаются по высоте; строку можно раскрыть явным
  * действием. Пустые поля показываются отдельной меткой, а не выглядят
- * как заполненные.
+ * как заполненные. Над таблицей — сводка валидации обязательных полей
+ * title/description/seller_attributes.
  */
-export default function DataPreview({ cards }: DataPreviewProps) {
+export default function DataPreview({
+  cards,
+  validation,
+  maxRows = PREVIEW_MAX_ROWS,
+}: DataPreviewProps) {
   const { t } = useTranslation();
   const tableId = useId();
   const [expandedRows, setExpandedRows] = useState<ReadonlySet<number>>(
     () => new Set(),
   );
 
-  const shown = Math.min(cards.length, PREVIEW_MAX_ROWS);
+  const inputValidation = validation ?? validateInput(cards);
+  const missingLabels = inputValidation.missingFields
+    .map((field) => t(`preview.columns.${field}`))
+    .join(", ");
+
+  const shown = Math.min(cards.length, maxRows);
   const visibleCards = cards.slice(0, shown);
 
   const toggleRow = (index: number): void => {
@@ -87,8 +142,50 @@ export default function DataPreview({ cards }: DataPreviewProps) {
     );
   };
 
+  if (cards.length === 0) {
+    return (
+      <div className="preview">
+        <p className="empty-state" role="status">
+          {t("preview.empty")}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="preview">
+      <p
+        className={`preview__validation${
+          inputValidation.valid ? "" : " preview__validation--error"
+        }`}
+        role={inputValidation.valid ? "status" : "alert"}
+      >
+        {t(summaryKey(inputValidation), { fields: missingLabels })}
+      </p>
+
+      <ul className="preview__fields">
+        {REQUIRED_INPUT_FIELDS.map((field) => {
+          const present = inputValidation.presentFields.includes(field);
+          return (
+            <li
+              key={field}
+              className={`preview__field preview__field--${
+                present ? "present" : "missing"
+              }`}
+            >
+              <span className="preview__field-name">
+                {t(`preview.columns.${field}`)}
+              </span>
+              <span className="preview__field-state">
+                {present
+                  ? t("preview.validation.present")
+                  : t("preview.validation.missing")}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
       <div className="preview__scroll">
         <table className="preview__table" aria-label={t("preview.title")}>
           <thead>
@@ -104,7 +201,7 @@ export default function DataPreview({ cards }: DataPreviewProps) {
                 {t("preview.columns.description")}
               </th>
               <th scope="col" className="preview__cell--wide">
-                {t("preview.columns.attributes")}
+                {t("preview.columns.seller_attributes")}
               </th>
               <th scope="col" className="preview__action">
                 <span className="sr-only">{t("preview.columns.action")}</span>
@@ -121,12 +218,18 @@ export default function DataPreview({ cards }: DataPreviewProps) {
                 >
                   <td className="preview__number">{index + 1}</td>
                   {cell(card.product_id, index, "preview__mono")}
-                  {cell(card.title, index, "preview__cell")}
-                  {cell(card.description, index, "preview__cell--wide")}
                   {cell(
-                    card.seller_attributes === undefined
-                      ? undefined
-                      : JSON.stringify(card.seller_attributes),
+                    fieldCellValue(card, "title"),
+                    index,
+                    "preview__cell",
+                  )}
+                  {cell(
+                    fieldCellValue(card, "description"),
+                    index,
+                    "preview__cell--wide",
+                  )}
+                  {cell(
+                    fieldCellValue(card, "seller_attributes"),
                     index,
                     "preview__cell--wide preview__mono",
                   )}

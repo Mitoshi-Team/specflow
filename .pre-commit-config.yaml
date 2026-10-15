@@ -15,6 +15,6 @@ repos:
     hooks:
       - id: ruff-check
         args: [--fix]
-        files: ^services/(api_gateway|attribute_extractor)/.*\.py$
+        files: ^services/(api_gateway|attribute_extractor|contracts)/.*\.py$
       - id: ruff-format
-        files: ^services/(api_gateway|attribute_extractor)/.*\.py$
+        files: ^services/(api_gateway|attribute_extractor|contracts)/.*\.py$

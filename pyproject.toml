@@ -8,14 +8,16 @@ requires-python = ">=3.13"
 dependencies = [
     "api-gateway",
     "attribute-extractor",
+    "specflow-contracts",
 ]
 
 [tool.uv.workspace]
-members = ["services/api_gateway", "services/attribute_extractor"]
+members = ["services/contracts", "services/api_gateway", "services/attribute_extractor"]
 
 [tool.uv.sources]
 api-gateway = { workspace = true }
 attribute-extractor = { workspace = true }
+specflow-contracts = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -36,7 +38,7 @@ target-version = "py313"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api_gateway", "attribute_extractor"]
+known-first-party = ["api_gateway", "attribute_extractor", "specflow_contracts"]
 
 [tool.pytest.ini_options]
 testpaths = ["services"]

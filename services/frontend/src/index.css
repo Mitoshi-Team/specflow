@@ -434,6 +434,54 @@ body {
   white-space: nowrap;
 }
 
+/* --- Сводка валидации (frontend.md, 6.3) --- */
+
+.preview__validation {
+  margin: 0;
+}
+
+.preview__validation--error {
+  color: var(--danger);
+}
+
+.preview__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preview__field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-caption);
+}
+
+/* Точка-индикатор дублируется словами («есть»/«нет»): цвет не единственный носитель смысла. */
+.preview__field::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+.preview__field--missing::before {
+  background: var(--danger);
+}
+
+.preview__field-name {
+  font-weight: 600;
+}
+
+.preview__field--missing .preview__field-name {
+  color: var(--danger);
+}
+
 /* --- Пустое состояние --- */
 
 .empty-state {

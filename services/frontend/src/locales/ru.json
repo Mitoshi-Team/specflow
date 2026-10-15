@@ -50,6 +50,7 @@
   },
   "preview": {
     "title": "Предпросмотр данных",
+    "empty": "Нет данных для предпросмотра",
     "emptyField": "поле не заполнено",
     "expand": "Показать полностью",
     "collapse": "Свернуть",
@@ -59,8 +60,15 @@
       "productId": "ID товара",
       "title": "Название",
       "description": "Описание",
-      "attributes": "Атрибуты продавца",
+      "seller_attributes": "Атрибуты продавца",
       "action": "Действия со строкой"
+    },
+    "validation": {
+      "present": "есть",
+      "missing": "нет",
+      "allPresent": "Все обязательные поля присутствуют",
+      "missingFields": "Отсутствуют поля: {{fields}}",
+      "noContent": "В данных нет ни одного из полей title, description или seller_attributes"
     }
   }
 }

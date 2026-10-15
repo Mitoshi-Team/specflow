@@ -1,0 +1,80 @@
+name: Build Docker Images on MR
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/docker-build.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/docker-build.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-frontend:
+    name: Build frontend image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/frontend
+          file: ./services/frontend/Dockerfile
+          push: false
+          tags: specflow-frontend:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  build-api-gateway:
+    name: Build api-gateway image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./services/api_gateway/Dockerfile
+          push: false
+          tags: specflow-api-gateway:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.sha }}
+          cache-from: type=gha,scope=api-gateway
+          cache-to: type=gha,mode=max,scope=api-gateway
+
+  build-attribute-extractor:
+    name: Build attribute-extractor image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build attribute extractor image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./services/attribute_extractor/Dockerfile
+          push: false
+          tags: specflow-attribute-extractor:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.sha }}
+          cache-from: type=gha,scope=attribute-extractor
+          cache-to: type=gha,mode=max,scope=attribute-extractor

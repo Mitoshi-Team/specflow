@@ -7,3 +7,22 @@
 
 /** Интервал периодической проверки работоспособности API (`/health`), в мс. */
 export const API_HEALTH_POLL_INTERVAL_MS = 30_000;
+
+/** Расширения файлов, принимаемых загрузчиком карточек (frontend.md, 6.3). */
+export const ACCEPTED_FILE_EXTENSIONS = [".csv", ".json", ".tsv"] as const;
+
+/** Разделитель полей CSV-файла (frontend.md, 5.4). */
+export const CSV_DELIMITER = ",";
+
+/** Разделитель полей TSV-файла. */
+export const TSV_DELIMITER = "\t";
+
+/**
+ * Максимальный размер загружаемого файла в байтах.
+ *
+ * ⚠️ В спецификациях задано только «разумный размер» без конкретного
+ * значения (frontend.md, 6.3). Здесь принято допущение 5 МиБ; при
+ * необходимости значение уточняется вместе с лимитом nginx
+ * (`client_max_body_size`).
+ */
+export const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;

@@ -20,6 +20,12 @@
 - `src/attribute_extractor/grounding.py` — проверка подтверждения кандидатов в
   тексте карточки (Этап 5): сопоставление `evidence_text`/токенов значения с
   полями карточки (числа `6,7` ↔ `6.7`, единицы `ГБ` ↔ `GB`).
+- `src/attribute_extractor/references.py` — справочники пайплайна
+  (`AttributeVocab`, `UnitRule`, `BrandVocab`) и in-memory каталог
+  `ReferenceCatalog` на базе справочников MLOps-контура.
+- `src/attribute_extractor/normalization.py` — нормализация значений (Этап 6):
+  базовая очистка, регистр (бренды/enum из справочников), синонимы, унификация
+  и (опц.) конверсия единиц, форматирование чисел, enum-валидация по `vocab`.
 - `tests/` — unit-тесты.
 
 ## Запуск

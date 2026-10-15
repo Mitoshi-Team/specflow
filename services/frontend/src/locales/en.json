@@ -8,5 +8,12 @@
       "ok": "available",
       "error": "unavailable"
     }
+  },
+  "api": {
+    "errors": {
+      "network": "Could not connect to the server",
+      "http": "The server returned an error",
+      "invalidResponse": "Invalid server response"
+    }
   }
 }

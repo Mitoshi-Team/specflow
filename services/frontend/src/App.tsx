@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-type ApiStatus = "loading" | "ok" | "error";
+import { getHealth } from "./api";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+type ApiStatus = "loading" | "ok" | "error";
 
 export default function App() {
   const { t } = useTranslation();
@@ -12,8 +12,8 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
 
-    fetch(`${API_BASE_URL}/api/v1/health`)
-      .then((response): ApiStatus => (response.ok ? "ok" : "error"))
+    getHealth()
+      .then((): ApiStatus => "ok")
       .catch((): ApiStatus => "error")
       .then((next) => {
         if (!cancelled) {

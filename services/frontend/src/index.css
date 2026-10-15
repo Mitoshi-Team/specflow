@@ -7,13 +7,89 @@
 body {
   margin: 0;
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.app {
-  max-width: 40rem;
-  padding: 2rem;
-  text-align: center;
+#root {
+  min-height: 100vh;
+}
+
+.layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.header__brand {
+  font-weight: 700;
+  text-decoration: none;
+  color: inherit;
+}
+
+.header__nav {
+  display: flex;
+  gap: 1rem;
+  margin-inline-start: auto;
+}
+
+.header__nav-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.header__nav-link.active {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.health {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+}
+
+.health__dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: none;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.health--loading .health__dot {
+  background: #9ca3af;
+}
+
+.health--ok .health__dot {
+  background: #16a34a;
+}
+
+.health--degraded .health__dot {
+  background: #f59e0b;
+}
+
+.health--down .health__dot,
+.health--error .health__dot {
+  background: #dc2626;
+}
+
+.layout__content {
+  flex: 1;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.page h1 {
+  margin-top: 0;
 }

@@ -5,8 +5,12 @@
 
 ## Устройство
 
-- `src/main.tsx` — точка входа.
-- `src/App.tsx` — корневой компонент.
+- `src/main.tsx` — точка входа (включая `BrowserRouter`).
+- `src/App.tsx` — корневой компонент с маршрутами.
+- `src/components/` — переиспользуемые компоненты (`AppLayout`, `Header`).
+- `src/pages/` — страницы (`PageHome`, `PageResults`).
+- `src/hooks/` — кастомные хуки (`useApiHealth`).
+- `src/constants.ts` — константы уровня приложения.
 - `src/i18n.ts` — конфигурация i18next.
 - `src/locales/` — переводы (`ru`, `en`).
 - `src/schemas/api.ts` — TS-типы, синхронизированные с API-контрактом
@@ -14,6 +18,15 @@
 - `src/api/` — клиент API на fetch: единая точка отправки запросов
   (`client.ts`), типизированные методы по эндпоинтам (`index.ts`).
 - `vite.config.ts` — конфигурация Vite и dev-сервера.
+
+## Маршруты
+
+- `/` — `PageHome` (главная).
+- `/results` — `PageResults` (результаты батча).
+
+Страницы рендерятся внутри `AppLayout` (Header + область контента).
+`Header` показывает индикатор здоровья API: хук `useApiHealth` периодически
+опрашивает `GET /api/v1/health` (интервал — `API_HEALTH_POLL_INTERVAL_MS`).
 
 ## Запуск
 

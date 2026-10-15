@@ -1,38 +1,20 @@
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Route, Routes } from "react-router-dom";
 
-import { getHealth } from "./api";
+import AppLayout from "./components/AppLayout";
+import PageHome from "./pages/PageHome";
+import PageResults from "./pages/PageResults";
 
-type ApiStatus = "loading" | "ok" | "error";
-
+/**
+ * Корневой компонент: маршруты приложения внутри общего лэйаута.
+ * `/` — главная, `/results` — результаты батча (frontend.md, раздел 6.1).
+ */
 export default function App() {
-  const { t } = useTranslation();
-  const [status, setStatus] = useState<ApiStatus>("loading");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getHealth()
-      .then((): ApiStatus => "ok")
-      .catch((): ApiStatus => "error")
-      .then((next) => {
-        if (!cancelled) {
-          setStatus(next);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   return (
-    <main className="app">
-      <h1>{t("app.title")}</h1>
-      <p>{t("app.subtitle")}</p>
-      <p>
-        {t("app.apiStatus")}: <strong>{t(`app.status.${status}`)}</strong>
-      </p>
-    </main>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route index element={<PageHome />} />
+        <Route path="results" element={<PageResults />} />
+      </Route>
+    </Routes>
   );
 }

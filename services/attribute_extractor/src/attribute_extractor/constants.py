@@ -5,6 +5,8 @@
 не хранить их в бизнес-логике и не дублировать между модулями.
 """
 
+from specflow_contracts import ExtractionMethod
+
 # --- Маршруты ---------------------------------------------------------------
 
 API_PREFIX = "/api/v1"
@@ -112,3 +114,43 @@ DEFAULT_LLM_MAX_TOKENS = 1200
 
 DEFAULT_LLM_TIMEOUT_SECONDS = 30.0
 """Таймаут запроса к внешней LLM, в секундах."""
+
+# --- Экстракторы (имена и приоритеты каскада) ------------------------------
+# Меньшее значение priority — экстрактор запускается раньше (cheap-first).
+# Имена совпадают со значениями ``ExtractionMethod``.
+
+RULE_EXTRACTOR_NAME = ExtractionMethod.RULE.value
+"""Имя экстрактора на правилах."""
+
+RULE_EXTRACTOR_PRIORITY = 0
+"""Приоритет экстрактора на правилах (запускается первым)."""
+
+DICT_EXTRACTOR_NAME = ExtractionMethod.DICT.value
+"""Имя словарного экстрактора."""
+
+DICT_EXTRACTOR_PRIORITY = 1
+"""Приоритет словарного экстрактора."""
+
+NER_EXTRACTOR_NAME = ExtractionMethod.NER.value
+"""Имя NER-экстрактора."""
+
+NER_EXTRACTOR_PRIORITY = 10
+"""Приоритет NER-экстрактора."""
+
+CLASSIFIER_EXTRACTOR_NAME = ExtractionMethod.CLASSIFIER.value
+"""Имя экстрактора-классификатора."""
+
+CLASSIFIER_EXTRACTOR_PRIORITY = 20
+"""Приоритет экстрактора-классификатора."""
+
+TRANSFORMER_EXTRACTOR_NAME = ExtractionMethod.ML_TRANSFORMER.value
+"""Имя transformer-экстрактора."""
+
+TRANSFORMER_EXTRACTOR_PRIORITY = 30
+"""Приоритет transformer-экстрактора."""
+
+LLM_EXTRACTOR_NAME = ExtractionMethod.LLM.value
+"""Имя LLM-экстрактора."""
+
+LLM_EXTRACTOR_PRIORITY = 50
+"""Приоритет LLM-экстрактора (резервный, запускается последним)."""

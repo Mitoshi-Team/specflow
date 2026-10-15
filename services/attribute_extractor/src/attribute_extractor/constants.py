@@ -211,3 +211,48 @@ GENERIC_CATEGORY = "generic"
 
 GENERIC_SCHEMA_VERSION = "1.0.0"
 """Версия generic-схемы."""
+
+# --- Candidate Merging (Этап 4) ----------------------------------------------
+
+DEFAULT_METHOD_WEIGHT = 1.0
+"""Вес метода по умолчанию, если метод отсутствует в конфигурации весов."""
+
+MERGED_METHOD = ExtractionMethod.HYBRID.value
+"""Метод кандидата, объединившего значения нескольких методов."""
+
+CONFLICT_FEATURE_KEY = "conflict"
+"""Ключ признака в ``AttributeCandidate.features``, отмечающий конфликт значений."""
+
+# --- Grounding Validation (Этап 5) -------------------------------------------
+
+GROUNDING_FACTOR_CONFIRMED = 1.0
+"""Множитель g_m в агрегации уверенности для подтверждённых кандидатов."""
+
+GROUNDING_FACTOR_UNCONFIRMED = 0.0
+"""Множитель g_m для неподтверждённых кандидатов."""
+
+DECIMAL_COMMA_PATTERN = r"(?<=\d),(?=\d)"
+"""Десятичная запятая между цифрами (сопоставление ``6,7`` и ``6.7``)."""
+
+INCH_SYMBOL_PATTERN = r"(\d)\s*(?:\"|″)"
+"""Дюймовый символ после числа (``6.7"``/``6.7″`` → ``6.7 in``)."""
+
+GROUNDING_UNIT_ALIASES = {
+    "гб": "gb",
+    "gb": "gb",
+    "тб": "tb",
+    "tb": "tb",
+    "мб": "mb",
+    "mb": "mb",
+    "кб": "kb",
+    "kb": "kb",
+    "ма·ч": "mah",
+    "ma·h": "mah",
+    "мач": "mah",
+    "mah": "mah",
+    "дюймов": "in",
+    "дюйма": "in",
+    "дюйм": "in",
+    "inch": "in",
+}
+"""Синонимы единиц измерения для сопоставления при grounding (ГБ ↔ GB и т.п.)."""

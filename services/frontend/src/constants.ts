@@ -29,3 +29,31 @@ export const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
  * (frontend.md, 9.2: `VITE_MAX_PREVIEW`, по умолчанию 20).
  */
 export const PREVIEW_MAX_ROWS = 20;
+
+/**
+ * Размер батча по умолчанию (frontend.md, 9.2: `VITE_DEFAULT_BATCH_SIZE=10`;
+ * сценарий 2 — «`batch_size` по умолчанию 10–20, макс. 50»).
+ */
+export const DEFAULT_BATCH_SIZE = 10;
+
+/** Минимальный размер батча (api_contract.md, раздел 2: `batch_size` ∈ [1, 50]). */
+export const MIN_BATCH_SIZE = 1;
+
+/** Максимальный размер батча (api_contract.md, раздел 2: `batch_size` ∈ [1, 50]). */
+export const MAX_BATCH_SIZE = 50;
+
+/**
+ * Порог уверенности по умолчанию (frontend.md, 9.2:
+ * `VITE_DEFAULT_THRESHOLD=0.80`; совпадает с `default_threshold` из GET /info).
+ */
+export const DEFAULT_CONFIDENCE_THRESHOLD = 0.8;
+
+/**
+ * Границы порога уверенности: `confidence` ∈ [0.0, 1.0]
+ * (api_contract.md, раздел 3.2; `threshold_override` переопределяет порог).
+ */
+export const MIN_CONFIDENCE_THRESHOLD = 0;
+export const MAX_CONFIDENCE_THRESHOLD = 1;
+
+/** Шаг ввода порога уверенности в UI (десятые доли единицы). */
+export const CONFIDENCE_THRESHOLD_STEP = 0.01;

@@ -48,6 +48,31 @@
   "upload": {
     "title": "Upload cards"
   },
+  "batch": {
+    "title": "Batch processing",
+    "run": "Process",
+    "reset": "Reset",
+    "progress": "Processed {{processed}} of {{total}}",
+    "errorsCount": "Processing errors: {{count}}",
+    "rangeHint": "Allowed: {{min}} to {{max}}",
+    "rangeError": "Value out of range from {{min}} to {{max}}",
+    "status": {
+      "idle": "Waiting to start",
+      "running": "Processing",
+      "done": "Completed",
+      "doneWithErrors": "Completed with errors",
+      "error": "Error"
+    },
+    "batchSize": {
+      "label": "Batch size"
+    },
+    "threshold": {
+      "label": "Confidence threshold"
+    },
+    "errors": {
+      "noCards": "No valid cards to process"
+    }
+  },
   "preview": {
     "title": "Data preview",
     "emptyField": "field is empty",

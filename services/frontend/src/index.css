@@ -434,6 +434,172 @@ body {
   white-space: nowrap;
 }
 
+/* --- Обработка батча --- */
+
+.batch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.batch__settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.batch__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 18rem;
+}
+
+.batch__label {
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.batch__input {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--text-primary);
+  background: var(--surface-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.batch__input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.batch__hint {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.batch__hint--error {
+  color: var(--danger);
+}
+
+.batch__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.batch__state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.batch__status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.batch__status-text {
+  font-size: var(--text-body);
+  font-weight: 500;
+}
+
+.batch__progress-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.batch__bar {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-control);
+}
+
+.batch__bar-fill {
+  height: 100%;
+  background: var(--highlight);
+  transition: width var(--transition-fast);
+}
+
+/*
+ * Точный процент во время выполнения неизвестен (API не сообщает прогресс),
+ * поэтому индикатор неопределённый, без ложной заливки (design.md, §7, §13).
+ */
+.batch__bar--indeterminate .batch__bar-fill {
+  display: none;
+}
+
+.batch__bar--indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 35%;
+  background: var(--highlight);
+  animation: batch-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes batch-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.batch__partial-errors {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.batch__error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--danger-soft);
+  border: var(--border-width) solid var(--danger);
+  border-radius: var(--radius-panel);
+}
+
+.batch__error-message {
+  margin: 0;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.batch__error-detail {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.batch__error-list {
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+}
+
 /* --- Пустое состояние --- */
 
 .empty-state {
@@ -485,6 +651,10 @@ body {
 
   .panel {
     padding: var(--space-4);
+  }
+
+  .batch__field {
+    max-width: none;
   }
 
   .btn {

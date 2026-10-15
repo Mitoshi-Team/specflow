@@ -30,5 +30,27 @@
       "http": "Сервер вернул ошибку",
       "invalidResponse": "Некорректный ответ сервера"
     }
+  },
+  "fileUpload": {
+    "inputLabel": "Выбор файла карточек",
+    "idle": "Перетащите файл сюда или выберите его",
+    "dragging": "Отпустите файл, чтобы загрузить",
+    "parsing": "Обработка файла…",
+    "success": "Файл «{{name}}» загружен",
+    "cardCount": "Карточек: {{total}}",
+    "hint": "Поддерживаются CSV, JSON и TSV",
+    "clear": "Убрать файл",
+    "row": "Строка {{row}}",
+    "errors": {
+      "emptyFile": "Файл пустой",
+      "unsupportedFormat": "Неподдерживаемый формат файла (ожидается CSV, JSON или TSV)",
+      "fileTooLarge": "Файл слишком большой",
+      "readError": "Не удалось прочитать файл",
+      "invalidJson": "Некорректный JSON",
+      "invalidStructure": "Структура файла не соответствует ожидаемой",
+      "invalidSellerAttributes": "Некорректный JSON в поле seller_attributes",
+      "noContent": "Строка не содержит title, description или seller_attributes",
+      "noCards": "В файле нет карточек"
+    }
   }
 }

@@ -2,219 +2,229 @@
 
 ## 1. Назначение
 
-Специфицировать ядро пайплайна извлечения характеристик товаров из текста карточки (title, description, seller_attributes). Модуль отвечает за извлечение, нормализацию, валидацию grounding, расчёт уверенности и формирование структурированного результата. Реализуется по принципу гибридного каскада (rules-first, cheap-first) с жёстким требованием «не выдумывать характеристики».
+Специфицировать ядро пайплайна извлечения характеристик товаров из текста карточки (title, description, seller_attributes). Модуль отвечает за очистку текста, извлечение, нормализацию, валидацию grounding, расчёт уверенности и формирование структурированного результата.
+
+Пайплайн построен как **целевой гибрид без LLM**: структурированный быстрый путь (атрибуты продавца), детерминированные правила на ядре, NER-трансформер на длинном хвосте и векторное сопоставление характеристик с каталогом полей. Генеративные модели не используются; главный инвариант — «не выдумывать характеристики».
 
 ## 2. Область применения
 
 **Вход:** текст карточки товара (title, description, seller_attributes). **Выход:** JSON со списком выделенных атрибутов, где для каждого указаны `attribute_code`, `normalized_value` (каноническое значение) и `confidence` (уверенность).
 
-Пайплайн проходит путь: входная карточка → препроцессинг → извлечение кандидатами (экстракторы) → мёржинг → валидация (grounding) → нормализация → агрегация уверенности → фильтрация по порогам → выходной результат. Модуль является основным вычислительным компонентом бэкенда (Python + FastAPI).
+Путь пайплайна:
+
+```
+карточка
+  → Этап 0. Чистка и препроцессинг
+  → Этап 1. Резолв схемы категории
+  → Этап 2. Structured-путь (seller_attributes)
+  → Этап 3. Ядро правил (title/description)
+  → Этап 4. NER (характеристика + свойство)
+  → Этап 5. Резолв поля (векторный матч + блоклист)
+  → Этап 6. Нормализация значений
+  → Этап 7. Rules-fallback (незакрытые обязательные поля)
+  → Этап 8. Мёржа и дедупликация
+  → Этап 9. Grounding
+  → Этап 10. Уверенность, пороги, статус
+  → Этап 11. Формирование результата
+```
 
 ## 3. Интерфейсы и контракты
 
-### 3.1 Интерфейс BaseExtractor
+### 3.1 Интерфейс экстрактора
 
 ```python
 from abc import ABC, abstractmethod
-from typing import List
+
+from specflow_contracts import AttributeCandidate, CategorySchema, ProductCard
 
 
 class BaseExtractor(ABC):
     name: str
-    priority: int  # lower = run earlier (rules first)
+    priority: int  # lower = run earlier
 
     @abstractmethod
-    def extract(self, card: ProductCard, schema: CategorySchema) -> List[AttributeCandidate]:
+    def extract(
+        self, card: ProductCard, schema: CategorySchema
+    ) -> list[AttributeCandidate]:
         """Извлечь кандидатов атрибутов для карточки в рамках схемы категории."""
         raise NotImplementedError
-
-    @abstractmethod
-    def supports(self, attribute_code: str, category: str | None) -> bool:
-        """Поддерживает ли экстрактор данный атрибут/категорию."""
-        return True
 ```
 
-**Требования**: каждый экстрактор возвращает список `AttributeCandidate` с заполненными `extraction_method`, `confidence`, `is_confirmed_in_text`, `source_spans`/`evidence_text` (где возможно).
+**Требования:** каждый экстрактор возвращает список `AttributeCandidate`. Кандидаты из NER несут `ner_score`; кандидаты, чей код поля ещё не известен (structured-ключ, NER-характеристика), разрешаются на Этапе 5.
 
-### 3.2 Ключевые DTO (структуры)
+### 3.2 Структурированный путь, правила и NER
 
-Используются доменные сущности (domain-model.md): `ProductCard`, `AttributeCandidate`, `ExtractionResult`, `CategorySchema`, `Span`.
+- **StructuredExtractor (priority 0)** — работает с `seller_attributes`; для каждой пары key→value ключ проходит резолв поля (Этап 5), значение — нормализацию (Этап 6). `extraction_method='structured'`.
+- **RuleExtractor (priority 1)** — регулярные выражения и близость ключевых слов для целевых полей (`brand`, `model`, `diagonal`, `storage`, `ram`, `battery_capacity`, `drive`, `processor`, `color`). Возвращает код поля напрямую. `extraction_method='rule'`.
+- **NERExtractor (priority 10)** — multilingual encoder, token-classification с двумя метками `CHARACTERISTIC` и `PROPERTY`; спаны пейрятся в пределах окна. `extraction_method='ner'`, `ner_score` — entity-level вероятность.
 
-### 3.3 Регистрация экстракторов
+### 3.3 Резолв поля
 
-`ExtractorRegistry` хранит список экстракторов, сортирует по `priority` (ascending). Порядок запуска по умолчанию: Rule(priority 0), Dict(1), NER(10), Classifier(20), Transformer(30), LLM(50) — конфигурируемо.
+```python
+class VectorIndex(Protocol):
+    def embed(self, text: str) -> list[float]: ...
+    def add(self, key: str, vector: list[float]) -> None: ...
+    def search(self, vector: list[float], k: int) -> list[tuple[str, float]]: ...
+```
+
+- **FieldCatalog** — каталог канонических полей (код, `name_ru`, синонимы, `value_type`, `unit`, флаг `is_new_field`), индексируется в `VectorIndex`.
+- **FieldBlocklist** — множество стоп-слов/шаблонов служебных «атрибутов» (выведено из EDA: «Подборки», «Продавец», BI-поля, «Гарантия предоставляется», «Потратить бонусы» и т.п.).
+- **FieldResolver** — сопоставляет характеристику с каталогом: `match_score` = близость к ближайшему полю; `>= MATCH_THRESHOLD` → существующий код; иначе проверка по блоклисту и (при отсутствии шума) авто-добавление нового поля.
+
+### 3.4 DTO
+
+Используются доменные сущности (domain-model.md): `ProductCard`, `AttributeCandidate`, `ExtractionResult`, `CategorySchema`, `Span`, `FieldCatalog`, `VectorIndex`, `FieldBlocklist`, `CharacteristicMatch`, `NewField`.
 
 ## 4. Этапы пайплайна (детально)
 
-### Этап 0. Препроцессинг
+### Этап 0. Чистка и препроцессинг
 
-- **Сбор текста**: `raw_text = " ".join(filter(None, [card.title, card.description, str(card.seller_attributes)]))`
-- **Нормализация**: сжатие множественных пробелов, унификация переносов, удаление мусорных символов (опц.), нормализация кавычек.
-- **Язык**: автоопределение (ru/en/mixed) — опц., влияет на словари/нормализаторы.
-- **Токенизация**: базовая (whitespace) для rules/dicts, токенизация модели — для NER/Transformer.
-- **Резолв схемы**: загрузка `CategorySchema` по `category_id/name` (fallback: generic schema).
+- **Сбор текста:** `raw_text` из `title`, `description`, `seller_attributes`.
+- **Очистка (обязательно):** снятие HTML-тегов, удаление служебных вставок и водяных знаков, мусорных/невидимых символов, унификация кавычек, тире и переносов, сжатие пробелов. Обоснование: 49,3% описаний с HTML и служебный шум (EDA).
+- **Язык:** автоопределение (ru/en/mixed) — для словарей и нормализаторов; при наличии `card.language` используется он.
+- **Токенизация:** whitespace — для правил, токенизатор модели — для NER.
+- **Правило:** очистка не изменяет содержательные значения; она улучшает вход для правил и NER.
 
-### Этап 1. Rules + Dicts (ядро, детерминированное)
+### Этап 1. Резолв схемы категории
 
-**RuleExtractor (priority 0)**:
+- Загрузка `CategorySchema` по `category_id`/`category_name`; fallback — generic-схема. Обязательные атрибуты схемы управляют rules-fallback (Этап 7).
 
-- Регулярные выражения для числовых значений с единицами: диагональ (`(\d+[.,]?\d*)\s*(дюйм|inch|"|″)`), объём памяти (`(\d+)\s*(ГБ|Гб|GB|ТБ|Тб|TB)`), ОЗУ (`(\d+)\s*(ГБ|GB|RAM)`), ёмкость батареи (`(\d+)\s*(мА·ч|мАч|mAh|mA·h)`), накопитель и др.
-- Шаблоны ключевых фраз («цвет: чёрный», «диагональ экрана — 6,7 дюйма»).
-- Экстракция бренда/модели по маркерам (словари + контекст).
-- Возвращает кандидатов с `extraction_method='rule'`, `confidence` 0.90–0.99 (высокая для точных шаблонов), `source_spans` по совпадению.
+### Этап 2. Structured-путь (seller_attributes)
 
-**DictExtractor (priority 1)**:
+- Для каждой пары key→value: ключ → резолв поля (Этап 5), значение → нормализация (Этап 6).
+- `extraction_method='structured'`. Это быстрый и точный путь: поле уже отделено продавцом.
 
-- Точный/частичный поиск по `synonyms_map` (alias→canonical) и `vocab` (enum). Приоритет точному совпадению (boundary-aware), затем словарному.
-- BrandVocab: поиск бренда с boundary (слова), исключение стоп-слов, уменьшение ложных срабатываний.
-- Цвет, материал, форм-факторы — enum-словари.
-- `confidence` 0.92–0.98 (словари надёжны), `is_confirmed_in_text=true` при совпадении.
+### Этап 3. Ядро правил (title/description)
 
-**Требования**: boundary-aware (не захватывать часть другого слова), регистронезависимый с учётом рус/англ, нормализация пробелов.
+- Регулярные выражения для числовых значений с единицами: диагональ (`(\d+[.,]?\d*)\s*(дюйм|inch|"|″)`), память (`(\d+)\s*(ГБ|GB|ТБ|TB)`), ОЗУ, батарея (`(\d+)\s*(мА·ч|мАч|mAh)`), накопитель.
+- Шаблоны ключевых фраз («цвет: чёрный») и близость ключевого слова к значению.
+- Бренд/модель — по словарю брендов со границами слов.
+- Код поля известен сразу. `extraction_method='rule'`.
 
-### Этап 2. ML-экстракторы (локальные)
+### Этап 4. NER (характеристика + свойство)
 
-**NERExtractor (priority 10)**:
+- Многоязычный encoder (token-classification), метки `CHARACTERISTIC` (имя поля) и `PROPERTY` (значение).
+- Пейринг `PROPERTY` ↔ ближайшая `CHARACTERISTIC` в пределах окна (предложение/контекст).
+- `ner_score` — entity-level вероятность для извлечённой сущности.
+- Характеристика разрешается в код поля на Этапе 5; `extraction_method='ner'`.
+- NER применяется к свободному тексту; структурированный путь (Этап 2) NER не дублирует.
 
-- Token-level NER (BIO/BILOU) для сущностей: `BRAND`, `MODEL`, `STORAGE_GB`, `DIAGONAL_INCH`, `BATTERY_MAH`, `RAM_GB`, `DRIVE_GB`, `PROCESSOR`, `COLOR`.
-- Предобработка под модель (сплиттер/токенизатор). Постобработка: склейка сущностей, валидация чисел+единиц, нормализация.
-- `confidence` по softmax токенов (entity-level), типично 0.80–0.95.
-- Обязателен маппинг в `attribute_code`.
+### Этап 5. Резолв поля (векторный матч + блоклист)
 
-**ClassifierExtractor (priority 20)**:
-
-- Малый классификатор (logreg/mini-transformer) для неоднозначных enum-атрибутов (цвет при наличии нескольких кандидатов, тип корпуса) по контекстному окну вокруг упоминания.
-- `confidence` = вероятность класса.
-
-**TransformerExtractor (priority 30)**:
-
-- Encoder (BERT/RoBERTa/ModernBERT) — sequence tagging (token classification) или extractive QA («какой объём памяти?») под схему категории.
-- Сильнее на длинном хвосте, возвращает спаны + уверенность span-level.
-- Локальный инференс, управляемая стоимость.
-
-### Этап 3. LLM-экстрактор (резервный)
-
-**LLMExtractor (priority 50)**:
-
-- **Режим**: zero-shot/few-shot. Включается только если `ENABLE_LLM=true` и имеются незакрытые обязательные атрибуты схемы И/ИЛИ кандидаты с `confidence < threshold` после этапов 1–2.
-- **Строгая схема вывода (JSON Schema)** — принудительная типизация. Обязательные поля: `attribute_code`, `raw_value`, `normalized_value`, `confidence` [0,1], `evidence_text` (обязателен), `source_field` (`title|description|seller_attributes`), `is_confirmed_in_text` (bool).
-- **Hard constraints (промпт)**:
-  - «Не выдумывай характеристики, которых нет в тексте карточки. Если атрибута нет — не указывай его».
-  - «Для каждого значения ОБЯЗАТЕЛЬНО укажи точную цитату (`evidence_text`) — фрагмент исходного текста, который подтверждает это значение (grounding)».
-  - «`is_confirmed_in_text` = true только если `evidence_text` дословно/по смыслу присутствует во входном тексте. Никогда не ставь true без подтверждения».
-  - «Возвращай только значения, подтверждённые текстом. Не додумывай публично известные характеристики, не указанные продавцом, без прямого упоминания в тексте».
-  - «Используй только коды атрибутов из переданной схемы категории».
-  - «Приводи значения к каноническому виду (normalized_value), сохраняя единицы измерения по умолчанию схемы».
-- **Параметры**: `temperature=0.0`, `top_p` ≤ 0.9 (фикс.), `max_tokens` достаточный для схемы, `response_format: json_schema` (strict).
-- **Пост-валидация LLM-ответа**: проверка JSON Schema, валидация `is_confirmed_in_text==true` и что `evidence_text` содержится в соответствующем `source_field` входного текста (exact/normalized substring). Кандидаты, не прошедшие grounding — отбрасываются. Также проверка соответствия vocab (enum) — при выходе → confidence penalty/low_confidence.
-- `extraction_method='llm'`, confidence калибруется.
-- **Правило активации LLM (gate)**: не вызывать для каждой карточки по умолчанию. Активация по условию: есть незакрытые `required_attributes` категории ИЛИ кандидаты с `confidence < default_threshold` после этапов 1–2. Глобальный флаг `ENABLE_LLM`.
-
-### Этап 4. Candidate Merging (объединение кандидатов)
-
-- Группировка по `(attribute_code, normalized_value)`. При равных — сливаем.
-- При разных `normalized_value` для одного `attribute_code` (конфликт): приоритет grounded + вес метода (rule/dict > NER/Trans > LLM), при обоих grounded — не объединяем, понижаем confidence, возможен `needs_review=true`.
-- **Взвешенная агрегация confidence** при слиянии: `conf_agg = (∑ w_m * conf_m * g_m) / (∑ w_m * g_m)`, где `g_m=1.0` если `is_confirmed_in_text` true.
-- **Метод-веса (рекомендуемые)**: `rule=1.00`, `dict=0.98`, `ner=0.90`, `classifier=0.90`, `ml_transformer=0.92`, `llm=0.85` (конфигурируемы).
-
-### Этап 5. Grounding Validation (обязательный фильтр)
-
-- **Hard constraint**: для всех финальных кандидатов `is_confirmed_in_text == true`.
-- Проверка: `evidence_text` или ключевые токены присутствуют в `card.title`/`card.description`/`seller_attributes` (case-insensitive, нормализация пробелов, числовое/единичное совпадение `6,7` vs `6.7`, `ГБ` vs `GB`).
-- Кандидаты без подтверждения **отбрасываются**.
-- Сохраняем `source_spans` (минимум одно упоминание).
+- Для кандидатов без кода поля (structured-ключи, NER-характеристики): `match_score` = близость характеристики к ближайшему полю `FieldCatalog` через `VectorIndex`.
+- `match_score >= MATCH_THRESHOLD` → существующий `attribute_code`; `match_score` сохраняется в кандидате для трассировки.
+- `match_score < MATCH_THRESHOLD`:
+  - характеристика в `FieldBlocklist` → кандидат отбрасывается (шум);
+  - иначе → **авто-добавление нового поля** в `FieldCatalog` (код генерируется слагификацией нормализованной характеристики), `is_new_field=true`.
+- `match_score` **не входит** в `confidence` (см. Этап 10): это маршрутизация, а не оценка достоверности значения.
 
 ### Этап 6. Нормализация значений
 
-- Базовая: trim, collapse spaces, нормализация кавычек, дефисов.
-- Регистр: бренды — канонический из BrandVocab, enum — канонический из vocab, остальное — опц. Title Case.
-- Синонимы: `synonyms_map` alias→canonical.
-- Единицы измерения: унификация сокращений (`Гб/ГБ/GB`, `Тб/ТБ/TB`, `дюйм/дюйма/"/″/inch`, `мАч/мА·ч/mAh`), приведение к канонической единице схемы, опц. конверсия (`unit_conversion_enabled`), единообразный формат чисел.
-- Enum-валидация: `value_type == 'enum'` → значение должно быть в `vocab`. Иначе попытка маппинга; при неуспехе — penalty/low_confidence либо отбрасывание при `enum_strict=true`.
-- `unit_value`: парсинг числа+единицы, нормализация, форматирование (напр. `256 ГБ`, `6,7 дюйма`, `5000 мА·ч`).
+- Базовая: trim, сжатие пробелов, нормализация кавычек/дефисов.
+- Синонимы: `synonyms_map` alias→canonical (`алый` → `красный`, `red` → `красный`).
+- Единицы измерения: унификация сокращений (`ГБ/Гб/GB`, `ТБ/TB`, `дюйм/"/″/inch`, `мАч/mAh`), приведение к канонической единице схемы, единообразный формат чисел (`8GB`/`8128 МБ` → `8 ГБ`).
+- Регистр: бренды — канонический из словаря, enum — канонический из `vocab`, остальное — по правилам.
+- Enum-валидация: `value_type == 'enum'` → значение должно быть в `vocab`; иначе попытка маппинга, при неуспехе — `low_confidence`.
+- `unit_value`: парсинг числа+единицы, нормализация, форматирование (`256 ГБ`, `6,7 дюйма`, `5000 мА·ч`).
 
-### Этап 7. Confidence, пороги, статус
+### Этап 7. Rules-fallback (незакрытые обязательные поля)
 
-- Финальный `confidence` = взвешенная агрегация после мёржа + штрафы: `enum_out_of_vocab` (-0.15, если не strict), `conflicting_values` (-0.10), `weak_evidence` (-0.05).
-- Пороги: `default_threshold_auto = 0.80`, `default_threshold_review = 0.60`, приоритет per-attribute.
-- Логика:
-  - `confidence >= T_auto` → `needs_review=false`, `status='ok`
-  - `T_review <= confidence < T_auto` → `needs_review=true`, `status='low_confidence`
-  - `confidence < T_review` → `needs_review=true`, `status='low_confidence`
-  - Обязательный атрибут отсутствует → `status='partial'`, `needs_review=true`
-  - Ошибка → `status='error'`
-  - Без схемы/пропущено → `status='skipped'`
-- Coverage: доля обязательных атрибутов категории, извлечённых с `confidence >= T_review` (или присутствующих).
+- Детерминированные правила выполняются как fallback: заполняют **только** те обязательные поля схемы, которые не закрыли structured/NER-пути.
+- `extraction_method='rule'`, `confidence=DETERMINISTIC_CONFIDENCE`.
 
-### Этап 8. Пост-фильтрация и дедупликация
+### Этап 8. Мёржа и дедупликация
 
-- Удаление дублей по `(attribute_code, normalized_value)`.
-- `allow_multiple == false` → оставить лучший по confidence.
-- Исключить кандидатов с `is_confirmed_in_text == false`.
-- `enum_strict == true` + значение вне vocab (не замаппилось) → отбрасываем.
+- Группировка кандидатов по `attribute_code`.
+- При одинаковом `normalized_value` — объединение (оставляем лучший по confidence, сохраняем спаны).
+- При разных `normalized_value` для одного кода — оставляем кандидата с максимальным confidence, `needs_review=true`.
+- `allow_multiple == false` → оставить лучшее значение.
 
-### Этап 9. Формирование результата
+### Этап 9. Grounding (обязательный фильтр)
+
+- **Hard constraint:** для всех финальных кандидатов `is_confirmed_in_text == true`.
+- Проверка: `evidence_text`/ключевые токены присутствуют в `title`/`description`/`seller_attributes` очищенной карточки (case-insensitive, нормализация пробелов, числовое/единичное совпадение `6,7` vs `6.7`, `ГБ` vs `GB`).
+- Кандидаты без подтверждения **отбрасываются**. Сохраняется минимум один `source_spans`.
+
+### Этап 10. Уверенность, пороги, статус
+
+- **Уверенность:**
+  - `structured`/`rule` → `DETERMINISTIC_CONFIDENCE` (константа, по умолчанию 0.9);
+  - `ner` → `ner_score`;
+  - `match_score` — только трассировка, в `confidence` не входит.
+- **Пороги:** `AUTO_THRESHOLD = 0.80`, `REVIEW_THRESHOLD = 0.60`.
+- **Логика статуса:**
+  - `confidence >= AUTO_THRESHOLD` → `needs_review=false`, `status='ok'`;
+  - `REVIEW_THRESHOLD <= confidence < AUTO_THRESHOLD` → `needs_review=true`, `status='low_confidence'`;
+  - `confidence < REVIEW_THRESHOLD` → `needs_review=true`, `status='low_confidence'`;
+  - обязательный атрибут отсутствует → `status='partial'`, `needs_review=true`;
+  - ошибка → `status='error'`; без схемы/пропущено → `status='skipped'`.
+- **Coverage:** доля обязательных атрибутов категории, извлечённых с `confidence >= REVIEW_THRESHOLD`.
+
+### Этап 11. Формирование результата
 
 - `ExtractionResult.attributes` = финальный список (отсортирован по `attribute_code`).
 - Заполнить `pipeline_version`, `processing_time_ms`, `low_confidence_count`, `needs_review`, `status`.
-- Обязательные поля: `extraction_method`, `is_confirmed_in_text=true`, `normalized_value`, `confidence`, `source_spans` (>=1).
+- Обязательные поля каждого атрибута: `extraction_method`, `is_confirmed_in_text=true`, `normalized_value`, `confidence`, `source_spans` (>=1).
 
 ## 6. Обработка граничных случаев
 
 | Случай | Поведение | Статус |
 | --- | --- | --- |
-| Текст пустой/недостаточный | Нет возможности подтвердить значения в тексте. Возвращаем пустой список. `needs_review=true`. | `skipped` |
-| Категория не определена | Применяем generic-схему. Сохраняем `category_id/category_name` из входа при наличии. | `ok`/`partial` |
-| Схема категории отсутствует | Применяем минимальную схему по умолчанию. Не блокируем обработку. | `partial` |
-| Атрибут встречается несколько раз с разными значениями | Grounded-кандидаты мёржатся. При конфликте разных `normalized_value` — понижаем confidence, не объединяем, либо `needs_review=true`. | `ok`/`low_confidence` |
-| Значение в тексте, но не в vocab (enum) | Пытаемся замаппить через `synonyms_map`. Если нет: при `enum_strict=true` отбрасываем; при `enum_strict=false` — penalty + `needs_review=true`. | `low_confidence` |
-| Числовой диапазон («128–256 ГБ») | Парсим по правилам. При неоднозначности — извлекаем явно упомянутое либо помечаем low_confidence. | `low_confidence` при неоднозначности |
-| Смешанные единицы (дюймы/мм, ГБ/ТБ) | `UnitRules`. При конверсии приводим к канонической единице схемы. | `ok`/`low_confidence` |
-| Короткое упоминание («6.7» без «дюйм») | Требуется контекстное подтверждение. Если rule/NER однозначно определяют атрибут — допустимо с пониженной confidence. Иначе не включать. | `low_confidence` или отбрасывается |
-| Синонимы/аббревиатуры («ОЗУ 8ГБ», «RAM 8GB») | Нормализация через synonyms + unit rules. `normalized_value` канонизируем. | `ok` |
-| Англо-русский микс | Регистронезависимый поиск, маппинги в обе стороны, словари брендов/enum. | `ok` |
-| Множественные кандидаты от разных экстракторов | Мёржинг с весами методов, приоритет grounded. | `ok` |
-| LLM вернул кандидата без `evidence_text` | Пост-валидация: отбрасываем (`require_evidence=true`). | фильтруется |
-| LLM указал `is_confirmed_in_text=false` | Пост-валидация: отбрасываем (grounding required). | фильтруется |
-| `evidence_text` не найден в исходном тексте | Проверка exact/normalized substring по `source_field`. При несовпадении — отбрасываем. | фильтруется |
-| Таймаут/ошибка LLM | Graceful degradation: пропускаем LLM-этап, используем этапы 1–2. Обновляем `status`/`needs_review`. | `low_confidence`/`partial` |
-| Модель NER/Transformer не загружена | Fallback на Rules/Dict/Classifier. WARNING + продолжение работы. | `ok`/`partial` |
+| Текст пустой/недостаточный | Нет возможности подтвердить значения. Пустой список, `needs_review=true`. | `skipped` |
+| Текст содержит HTML/служебные вставки | Очистка на Этапе 0, значения ищутся в очищенном тексте. | `ok` |
+| Категория не определена | Generic-схема; `category_id/category_name` из входа при наличии. | `ok`/`partial` |
+| Схема категории отсутствует | Минимальная схема по умолчанию, обработка не блокируется. | `partial` |
+| Характеристика не сопоставлена (`match_score < MATCH_THRESHOLD`), не шум | Авто-добавление нового поля (`is_new_field=true`), кандидат возвращается. | `ok` |
+| Характеристика в блоклисте (служебный «атрибут») | Кандидат отбрасывается как шум. | фильтруется |
+| Атрибут встречается несколько раз с разными значениями | Оставляем max confidence, `needs_review=true`. | `low_confidence` |
+| Значение в тексте, но не в vocab (enum) | Попытка маппинга через `synonyms_map`; при неуспехе — `low_confidence`. | `low_confidence` |
+| Числовой диапазон («128–256 ГБ») | Парсинг по правилам; при неоднозначности — извлечённое явно либо `low_confidence`. | `low_confidence` при неоднозначности |
+| Смешанные единицы (дюймы/мм, ГБ/ТБ) | Unit-rules приводят к канонической единице. | `ok`/`low_confidence` |
+| Короткое упоминание («6.7» без «дюйм») | Требуется контекст; если правило/NER однозначно определяет поле — допустимо с пониженной уверенностью, иначе не включать. | `low_confidence` или отбрасывается |
+| Синонимы/аббревиатуры («ОЗУ 8ГБ», «RAM 8GB») | Нормализация через синонимы и unit-rules. | `ok` |
+| Англо-русский микс | Регистронезависимый поиск, двусторонние маппинги, словари брендов/enum. | `ok` |
+| NER-модель не загружена | Fallback на structured/rules; предупреждение, продолжение работы. | `ok`/`partial` |
+| Векторный индекс недоступен | Structured/NER-характеристики без матча: при недоступности — fallback на правила и точное совпадение по имени поля. | `partial` |
+| Множественные кандидаты от разных путей | Мёржа по `attribute_code`, выбор max confidence. | `ok` |
 
 ## 7. Тестирование модуля
 
 ### 7.1 Unit-тесты
 
+- Cleaner: снятие HTML, удаление служебных вставок/водяных знаков, мусорных символов, нормализация кавычек/тире/пробелов.
+- StructuredExtractor: key→value, резолв поля по ключу, нормализация значения.
 - RuleExtractor: парсинг единиц, шаблоны, boundary-aware, форматы чисел.
-- DictExtractor: точное/частичное, синонимы, BrandVocab (стоп-слова), регистронезависимость.
-- NERExtractor: BIO, склейка, постнормализация, маппинг в attribute_code.
-- Normalizers: unit rules, синонимы, enum-mapping, форматирование чисел+единиц.
+- NERExtractor: две метки, пейринг `PROPERTY`↔`CHARACTERISTIC`, `ner_score`, маппинг в код.
+- FieldResolver/VectorIndex: матч по порогу, ниже порога → новое поле, блоклист отбрасывает шум.
+- Normalizer: unit-rules, синонимы, enum-mapping, форматирование чисел+единиц.
 - GroundingValidator: exact/normalized, числовое (`6,7` vs `6.7`), единичное совпадение.
-- Merging/Aggregation: группировка, взвешивание, конфликты, дедупликация.
-- Confidence/Thresholds: пороги, штрафы, `needs_review`, `status`.
+- Merger: группировка по коду, выбор max confidence, конфликт → `needs_review`.
+- Confidence: `DETERMINISTIC_CONFIDENCE`, `ner_score`, пороги, `needs_review`, `status`.
 
 ### 7.2 Integration-тесты
 
-- Каскад cheap-first: rules закрывают ядро, ML дополняет, LLM не вызывается при достаточном покрытии.
-- Grounding hard-filter: LLM-кандидат без подтверждения отбрасывается.
+- Полный путь: clean → structured → rules → NER → field resolution → normalize → fallback → merge → grounding → confidence.
+- Rules-fallback закрывает только оставшиеся обязательные поля.
+- Авто-добавление поля ниже порога и отбрасывание мусора по блоклисту.
+- Graceful degradation: NER-модель/векторный индекс недоступны → fallback без падения.
 - Батч: частично успешный батч не прерывает остальные.
-- Graceful degradation: `ENABLE_LLM=true` но недоступен → fallback на 1–2 этапы.
-- Enum strict: поведение `enum_strict=true/false`.
-- CategorySchema: required/optional, allow_multiple.
+- Grounding hard-filter: кандидат без подтверждения отбрасывается.
 
 ### 7.3 Contract-тесты
 
 - Соответствие `AttributePrediction`/`ExtractionResponseItem` (api_contract.md).
 - Обязательные поля: `attribute_code`, `normalized_value`, `confidence`, `extraction_method`, `is_confirmed_in_text`.
-- `confidence` ∈ [0.0,1.0].
-- `is_confirmed_in_text == true` во всех финальных атрибутах.
+- `confidence` ∈ [0.0,1.0]; `is_confirmed_in_text == true` во всех финальных атрибутах.
+- `extraction_method ∈ {structured, rule, ner}`.
 
 ### 7.4 Приёмочные тест-кейсы
 
 - Смартфон: бренд, модель, объём памяти, диагональ экрана, ёмкость батареи, цвет.
 - Ноутбук: бренд, процессор, объём ОЗУ, накопитель, диагональ экрана, цвет.
-- Редкая категория: проверка без массовых правил, активация LLM только при необходимости.
+- Редкая категория: проверка без массовых правил, NER и векторный матч закрывают хвост.
 - Длинный хвост: редкие значения, синонимы, аббревиатуры.
 - Микс RU/EN: корректная нормализация.
+- Грязный ввод: HTML и служебные вставки не портят извлечение.
 
 ## 8. Метрики качества модуля
 
@@ -226,61 +236,62 @@ class BaseExtractor(ABC):
 | Accuracy (per-attribute) | Корректность по конкретному атрибуту | Отдельно по каждому атрибуту |
 | Coverage | Доля карточек, в которых атрибут заполнен | (карточки с атрибутом) / (всего карточек) |
 | ExactMatch | Строгое совпадение `normalized_value` с эталонным | 1/0 |
-| SoftMatch | Мягкое совпадение (синонимы, эквивалентные единицы после нормализации) | 1/0 по правилам |
-| % ниже порога (needs_review) | Доля предсказаний с `confidence < threshold_auto` | Нагрузка на ручную проверку |
-| % отфильтровано grounding | Доля кандидатов, отфильтрованных GroundingValidator | Контроль жёсткости фильтра |
+| SoftMatch | Мягкое совпадение (синонимы, эквивалентные единицы) | 1/0 по правилам |
+| % ниже порога (needs_review) | Доля предсказаний с `confidence < AUTO_THRESHOLD` | Нагрузка на ручную проверку |
+| % отфильтровано grounding | Доля кандидатов, отброшенных GroundingValidator | Контроль жёсткости фильтра |
+| Доля новых полей | Доля кандидатов с `is_new_field=true` | Контроль дрейфа каталога |
 | Coverage по required-атрибутам | Покрытие обязательных атрибутов категории | Среднее/по категории на gold-сете |
 | Качество по категориям (stratified) | Оценка отдельно по каждой категории | Stratified по `category_name/id` |
-| Weighted by traffic | Метрики взвешенные по трафику/частоте фильтрации атрибута | При наличии статистики трафика |
+| Weighted by traffic | Метрики, взвешенные по трафику фильтрации атрибута | При наличии статистики трафика |
 
-**Правила валидации**: сравнение по `normalized_value` (каноническому); учитывать `allow_multiple` (матч по пересечению); grounding-фильтр не должен искусственно завышать Precision без учёта Recall; метрики — отдельно по каждому атрибуту.
+**Правила валидации:** сравнение по `normalized_value`; учитывать `allow_multiple` (матч по пересечению); grounding-фильтр не должен искусственно завышать Precision без учёта Recall; метрики — отдельно по каждому атрибуту; настройка порогов и оценка — только на gold-наборе (см. design.md, «Данные и ML-методология»).
 
 ## 9. Мониторинг, логирование, трассировка
 
 ### 9.1 Логирование
 
-- Уровни: INFO (ключевые этапы каскада), DEBUG (детали кандидатов), WARNING (fallbacks/degraded), ERROR (failures).
-- Структурные логи (JSON) в prod-подобном режиме: `product_id`, `category`, `pipeline_version`, `stages`, `methods_used`, `llm_called`, `candidates_before_grounding`, `candidates_after_grounding`, `processing_time_ms`, `needs_review`.
+- Уровни: INFO (этапы), DEBUG (детали кандидатов), WARNING (fallbacks/degraded), ERROR (failures).
+- Структурные логи (JSON): `product_id`, `category`, `pipeline_version`, `stages`, `methods_used`, `candidates_before_grounding`, `candidates_after_grounding`, `new_fields`, `blocked_fields`, `processing_time_ms`, `needs_review`.
 - Без PII: не логировать полный сырой текст; допустимы `text_hash`, длина, первые N символов title.
-- Секреты: никогда не логировать `LLM_API_KEY`, заголовки авторизации.
 
 ### 9.2 Метрики (runtime)
 
 - `extract_requests_total{method="single|batch"}`
-- `extract_duration_ms{stage="preprocess|rules|dict|ner|classifier|transformer|llm|merge|normalize|total"}`
+- `extract_duration_ms{stage="clean|structured|rules|ner|resolve|normalize|fallback|merge|grounding|total"}`
 - `candidates_total{method,attribute_code}`
+- `vector_match_total{outcome="existing|new|blocked"}`
+- `new_fields_total{attribute_code}`
 - `grounding_filtered_total{reason}`
 - `low_confidence_total{attribute_code,threshold}`
 - `needs_review_ratio`
-- `llm_calls_total{model,status="ok|timeout|error"}`
-- `llm_latency_ms`, `llm_tokens_total{type="prompt|completion"}`
 - `coverage_by_attribute{attribute_code,category}`
-- `degraded_mode{component="ner|transformer|llm"}`
+- `degraded_mode{component="ner|vector_index"}`
 
 ### 9.3 Трассировка
 
 - `pipeline_version` в каждом ответе API.
-- `extraction_method`, `source_spans`, `evidence_text` для каждого финального кандидата.
+- `extraction_method`, `ner_score`, `match_score`, `is_new_field`, `source_spans`, `evidence_text` для каждого финального кандидата.
 - Тайминги по этапам.
-- Версии моделей: `ner_model_version`, `transformer_model_version`, `llm_model`, `vocab_version`, `rules_version`.
+- Версии компонентов: `ner_model_version`, `field_catalog_version`, `vocab_version`, `rules_version`.
 
 ### 9.4 Алерты (рекомендуемые)
 
 - Резкий рост `needs_review` (>X%) за окно.
-- Увеличение доли отфильтрованных grounding (>Y%) при включённом LLM.
-- Рост `llm_errors_total`/таймаутов.
+- Рост доли новых полей (дрейф каталога).
+- Рост `degraded_mode` (недоступность NER/векторного индекса).
 - Падение coverage по required-атрибутам ключевых категорий.
-- Долгая инициализация моделей при старте (>Z сек).
+- Долгая инициализация моделей/индекса при старте.
 
 ## 10. Принципы реализации
 
-- KISS + модульность: каждый экстрактор изолирован.
-- Cheap-first каскад: дорогие компоненты только при gate (coverage < 1.0 по required или low_confidence).
-- Grounding как инвариант: никогда не выпускать кандидата с `is_confirmed_in_text == false`. Фильтрация после каждого источника (особенно LLM).
-- Determinism: Rules/Dict детерминированы. Для LLM — `temperature=0.0`, фиксированные `top_p`, версионирование промпта.
-- Fail-safe: graceful degradation, partial results в батче, ошибки элемента не валят батч.
-- Traceable: каждый финальный атрибут несёт `extraction_method`, `confidence`, `source_spans`, `evidence_text`.
-- Тестируемо: чистые интерфейсы, DI, конфиг через `Pydantic Settings`.
-- Обратная совместимость: `pipeline_version` увеличивается при изменении логики нормализации/агрегации/порогов.
-- Не выдумывать: явный запрет в LLM-промпте + пост-валидация grounding — главный защитный барьер.
-- Единообразие: `attribute_code` в snake_case, `normalized_value` в каноническом формате схемы.
+- **Чистка — первый этап:** любой входящий текст очищается до извлечения.
+- **Целевой гибрид:** структура (`seller_attributes`) → правила (ядро) → NER (хвост) → векторный матч (канон полей) → нормализация → rules-fallback.
+- **Grounding как инвариант:** никогда не выпускать кандидата с `is_confirmed_in_text == false`.
+- **Determinism:** structured/rules детерминированы; для NER фиксируются версия модели и параметры.
+- **Простая уверенность:** `structured`/`rule` → константа, `ner` → `ner_score`; никаких весов методов, штрафов и взвешенной агрегации.
+- **Fail-safe:** graceful degradation, partial results в батче, ошибки элемента не валят батч.
+- **Traceable:** каждый финальный атрибут несёт `extraction_method`, `confidence`, `source_spans`, `evidence_text`.
+- **Тестируемо:** чистые интерфейсы, DI, конфиг через `Pydantic Settings`.
+- **Обратная совместимость:** `pipeline_version` растёт при изменении логики нормализации/порогов/резолва полей.
+- **Не выдумывать:** NER + grounding — главный защитный барьер; LLM не используется.
+- **Единообразие:** `attribute_code` в snake_case, `normalized_value` в каноническом формате.

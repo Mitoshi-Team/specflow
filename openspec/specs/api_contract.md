@@ -50,12 +50,15 @@
   "source_spans": [
     {"field": "title|description|seller_attributes", "text": "string", "start": 0, "end": 10}
   ],
-  "extraction_method": "rule|dict|ner|classifier|ml_transformer|llm|hybrid",
-  "is_confirmed_in_text": true
+  "extraction_method": "structured|rule|ner",
+  "is_confirmed_in_text": true,
+  "ner_score": 0.0,
+  "match_score": 0.0,
+  "is_new_field": false
 }
 ```
 
-**Ограничения:** `confidence` ∈ [0.0,1.0], `is_confirmed_in_text == true` в финальном ответе.
+**Ограничения:** `confidence` ∈ [0.0,1.0], `is_confirmed_in_text == true` в финальном ответе. `ner_score` присутствует для `extraction_method="ner"`; `match_score` и `is_new_field` — опциональная трассировка резолва поля.
 
 ### 3.3 ExtractionResponseItem
 
@@ -122,7 +125,7 @@
   "version": "string",
   "pipeline_version": "string",
   "uptime_seconds": 123,
-  "models_loaded": ["rule_engine", "ner", "classifier", "llm"],
+  "models_loaded": ["structured", "rules", "ner", "vector_index"],
   "cache_enabled": true
 }
 ```
@@ -170,7 +173,7 @@
   "service_name": "attribute-extractor",
   "version": "1.0.0",
   "pipeline_version": "1.0.0",
-  "extraction_methods": ["rule","dict","ner","classifier","ml_transformer","llm","hybrid"],
+  "extraction_methods": ["structured","rule","ner"],
   "default_threshold": 0.80,
   "supports_batch": true,
   "max_batch_size": 50,
@@ -186,13 +189,13 @@
 
 ### 4.7 GET `/api/v1/config` — конфигурация (read-only)
 
-**Response (200):** `confidence_thresholds`, `method_weights`, `hybrid_strategy`, `llm_enabled` (bool).
+**Response (200):** `confidence_thresholds` (auto/review), `match_threshold`, `deterministic_confidence`.
 
 ## 5. Нефункциональные требования API
 
 - **Производительность:** stateless, горизонтально масштабируемый. Приоритет дешёвых путей (rules/NER).
 - **Надёжность:** graceful degradation — при недоступности тяжёлых компонентов использовать fallback с корректным `status`.
-- **Безопасность:** валидация входа, отсутствие логирования PII в сыром виде, read-only конфиги без секретов. Секреты (LLM API-ключи) — только через переменные окружения.
+- **Безопасность:** валидация входа, отсутствие логирования PII в сыром виде, read-only конфиги без секретов.
 - **Документация:** автоматическая OpenAPI/Swagger (`/docs`, `/redoc`).
 - **Кэширование:** опционально (in-memory) для идентичных карточек по хэшу текста.
 - **Ограничения:** защита от слишком больших описаний (soft-limit) с понятной 422-ошибкой.

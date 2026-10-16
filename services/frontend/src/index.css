@@ -648,6 +648,257 @@ body {
   color: var(--danger);
 }
 
+/* --- Сводка батча (frontend.md, 6.2 ResultsSummary; design.md, §7) --- */
+
+.results-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.results-summary__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.results-summary__metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+}
+
+.results-summary__label {
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.results-summary__value {
+  margin: 0;
+  font-size: var(--text-page-title);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.results-summary__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+}
+
+.results-summary__meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.results-summary__meta-item dt {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.results-summary__meta-item dd {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.results-summary__meta-value--mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+}
+
+/* --- Таблица результатов (frontend.md, 6.2 ResultsTable, сценарий 3) --- */
+
+.results-table__scroll {
+  overflow-x: auto;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-table);
+  line-height: 1.5;
+}
+
+.results-table th,
+.results-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: var(--border-width) solid var(--border-subtle);
+}
+
+.results-table thead th {
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+.results-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.results-table__code {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.results-table__number {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.results-table__action {
+  white-space: nowrap;
+}
+
+.results-table__details {
+  background: var(--surface-2);
+}
+
+.results-table__empty-attributes,
+.results-table__muted {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+/*
+ * Статус обозначается текстом; красный — только для ошибок
+ * (design.md, §8, §11, §13: цвет не единственный носитель смысла).
+ */
+.status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  background: var(--highlight-soft);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  white-space: nowrap;
+}
+
+.status--error {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+/* Требует проверки — заметная светло-серая маркировка с явным текстом. */
+.flag--review {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--text-primary);
+  background: var(--highlight-soft);
+  border: var(--border-width) solid var(--text-muted);
+  border-radius: var(--radius-control);
+  white-space: nowrap;
+}
+
+.results-table__attributes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-table);
+}
+
+.results-table__attributes th,
+.results-table__attributes td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: var(--border-width) solid var(--border-subtle);
+}
+
+.results-table__attributes thead th {
+  font-size: var(--text-micro);
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.results-table__attributes tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.results-table__method {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.results-table__value {
+  min-width: 10rem;
+  word-break: break-word;
+}
+
+.results-table__evidence {
+  min-width: 14rem;
+}
+
+/* Подтверждающий фрагмент — дословный текст на отдельной поверхности. */
+.results-table__quote {
+  display: block;
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-3);
+  border-radius: var(--radius-control);
+  word-break: break-word;
+}
+
+.results-table__spans {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.results-table__confirmed {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+}
+
+/* Неподтверждённое значение — критичное противоречие grounding (design.md, §8). */
+.results-table__confirmed--no {
+  color: var(--danger);
+}
+
+/*
+ * Уверенность: число видно всегда; низкая относительно порога получает
+ * нейтральную пометку, а не красный (низкая уверенность — не ошибка).
+ */
+.confidence {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+}
+
+.confidence--low {
+  padding: 0 var(--space-1);
+  color: var(--text-primary);
+  background: var(--highlight-soft);
+  border-radius: var(--radius-control);
+}
+
 /* --- Пустое состояние --- */
 
 .empty-state {

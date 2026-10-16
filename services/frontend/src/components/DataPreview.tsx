@@ -11,6 +11,7 @@ import {
   type RequiredInputField,
 } from "../lib/inputValidation";
 import type { ProductCardRequest } from "../schemas/api";
+import EmptyState from "./EmptyState";
 
 /**
  * Минимальная длина значения, начиная которой для строки показывается
@@ -145,9 +146,7 @@ export default function DataPreview({
   if (cards.length === 0) {
     return (
       <div className="preview">
-        <p className="empty-state" role="status">
-          {t("preview.empty")}
-        </p>
+        <EmptyState message={t("preview.empty")} />
       </div>
     );
   }

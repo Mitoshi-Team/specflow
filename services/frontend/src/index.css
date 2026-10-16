@@ -110,35 +110,54 @@ body {
   text-overflow: ellipsis;
 }
 
-.header__nav {
+.header__nav,
+.lang-switch {
   display: flex;
   gap: var(--space-1);
+}
+
+.header__nav {
   margin-inline-start: auto;
 }
 
-.header__nav-link {
+/*
+ * Общий таб шапки: используется и ссылками навигации по страницам, и
+ * кнопками переключателя языка, чтобы отступы, скругление, типографика
+ * и состояния совпадали без дублирования стилей.
+ */
+.header__tab {
   display: inline-flex;
   align-items: center;
   min-height: 32px;
   padding: 0 var(--space-3);
+  border: none;
   border-radius: var(--radius-control);
+  background: transparent;
   color: var(--text-secondary);
   text-decoration: none;
+  font-family: var(--font-sans);
   font-size: var(--text-body);
+  cursor: pointer;
   transition:
     color var(--transition-fast),
     background-color var(--transition-fast);
 }
 
-.header__nav-link:hover {
+.header__tab:hover {
   color: var(--text-primary);
   background: var(--surface-2);
 }
 
-.header__nav-link.active {
+.header__tab.active,
+.header__tab--active {
   color: var(--text-primary);
   background: var(--highlight-soft);
   font-weight: 500;
+}
+
+.header__tab:focus-visible {
+  outline: 2px solid var(--highlight);
+  outline-offset: 2px;
 }
 
 /* --- Страницы --- */
@@ -200,6 +219,12 @@ body {
   margin: var(--space-3) 0 0;
   font-size: var(--text-caption);
   color: var(--text-muted);
+}
+
+.panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 /* --- Кнопки и ссылки-действия --- */
@@ -576,6 +601,231 @@ body {
   white-space: nowrap;
 }
 
+/* --- Обработка батча --- */
+
+.batch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.batch__settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.batch__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 18rem;
+}
+
+.batch__label {
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.batch__input {
+  width: 100%;
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: var(--text-body);
+  color: var(--text-primary);
+  background: var(--surface-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.batch__input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.batch__hint {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.batch__hint--error {
+  color: var(--danger);
+}
+
+.batch__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.batch__state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.batch__status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.batch__status-text {
+  font-size: var(--text-body);
+  font-weight: 500;
+}
+
+.batch__progress-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.batch__bar {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-control);
+}
+
+.batch__bar-fill {
+  height: 100%;
+  background: var(--highlight);
+  transition: width var(--transition-fast);
+}
+
+/*
+ * Точный процент во время выполнения неизвестен (API не сообщает прогресс),
+ * поэтому индикатор неопределённый, без ложной заливки (design.md, §7, §13).
+ */
+.batch__bar--indeterminate .batch__bar-fill {
+  display: none;
+}
+
+.batch__bar--indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 35%;
+  background: var(--highlight);
+  animation: batch-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes batch-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.batch__partial-errors {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+/* --- Баннер ошибки (frontend.md, 6.2 ErrorBanner; design.md, §7) --- */
+
+.error-banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--danger-soft);
+  border: var(--border-width) solid var(--danger);
+  border-radius: var(--radius-panel);
+}
+
+.error-banner__message {
+  margin: 0;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+.error-banner__summary {
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.error-banner__detail {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.error-banner__list {
+  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+}
+
+/* --- Индикатор загрузки (frontend.md, 6.2 Loader; design.md, §7, §11, §12) --- */
+
+.loader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.loader--inline {
+  flex-direction: row;
+  align-items: center;
+}
+
+.loader__spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-primary);
+  border-radius: 50%;
+  animation: loader-spin 0.8s linear infinite;
+}
+
+.loader__label {
+  font-size: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.loader__bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-control);
+}
+
+.loader__bar-fill {
+  height: 100%;
+  background: var(--highlight);
+  transition: width var(--transition-fast);
+}
+
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* --- Сводка валидации (frontend.md, 6.3) --- */
 
 .preview__validation {
@@ -624,6 +874,265 @@ body {
   color: var(--danger);
 }
 
+/* --- Сводка батча (frontend.md, 6.2 ResultsSummary; design.md, §7) --- */
+
+.results-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.results-summary__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.results-summary__metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+}
+
+.results-summary__label {
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.results-summary__value {
+  margin: 0;
+  font-size: var(--text-page-title);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.results-summary__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+}
+
+.results-summary__meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.results-summary__meta-item dt {
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.results-summary__meta-item dd {
+  margin: 0;
+  font-size: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.results-summary__meta-value--mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+}
+
+/* --- Таблица результатов (frontend.md, 6.2 ResultsTable, сценарий 3) --- */
+
+.results-table__scroll {
+  overflow-x: auto;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-table);
+  line-height: 1.5;
+}
+
+.results-table th,
+.results-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: var(--border-width) solid var(--border-subtle);
+}
+
+.results-table thead th {
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+.results-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.results-table__code {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.results-table__number {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.results-table__action {
+  white-space: nowrap;
+}
+
+.results-table__details {
+  background: var(--surface-2);
+}
+
+.results-table__empty-attributes,
+.results-table__muted {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+/*
+ * Статус обозначается текстом; красный — только для ошибок
+ * (design.md, §8, §11, §13: цвет не единственный носитель смысла).
+ */
+.status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  background: var(--highlight-soft);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  white-space: nowrap;
+}
+
+.status--error {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+/* Требует проверки — заметная светло-серая маркировка с явным текстом. */
+.flag--review {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-caption);
+  color: var(--text-primary);
+  background: var(--highlight-soft);
+  border: var(--border-width) solid var(--text-muted);
+  border-radius: var(--radius-control);
+  white-space: nowrap;
+}
+
+.results-table__attributes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-table);
+}
+
+.results-table__attributes th,
+.results-table__attributes td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: var(--border-width) solid var(--border-subtle);
+}
+
+.results-table__attributes thead th {
+  font-size: var(--text-micro);
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.results-table__attributes tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.results-table__method {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/*
+ * Бейдж метода извлечения использует нейтральную базу `.status` и добавляет
+ * только моноширинный шрифт для технического значения (design.md, §9).
+ */
+.method-badge {
+  font-family: var(--font-mono);
+}
+
+.results-table__value {
+  min-width: 10rem;
+  word-break: break-word;
+}
+
+.results-table__evidence {
+  min-width: 14rem;
+}
+
+/* Подтверждающий фрагмент — дословный текст на отдельной поверхности. */
+.results-table__quote {
+  display: block;
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-3);
+  border-radius: var(--radius-control);
+  word-break: break-word;
+}
+
+.results-table__spans {
+  margin: var(--space-2) 0 0;
+  padding-inline-start: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.results-table__confirmed {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+}
+
+/* Неподтверждённое значение — критичное противоречие grounding (design.md, §8). */
+.results-table__confirmed--no {
+  color: var(--danger);
+}
+
+/*
+ * Уверенность: число видно всегда; низкая относительно порога получает
+ * нейтральную пометку, а не красный (низкая уверенность — не ошибка).
+ */
+.confidence {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+}
+
+.confidence--low {
+  padding: 0 var(--space-1);
+  color: var(--text-primary);
+  background: var(--highlight-soft);
+  border-radius: var(--radius-control);
+}
+
 /* --- Пустое состояние --- */
 
 .empty-state {
@@ -665,7 +1174,7 @@ body {
     margin-inline-start: 0;
   }
 
-  .header__nav-link {
+  .header__tab {
     min-height: var(--control-height-touch);
   }
 
@@ -675,6 +1184,10 @@ body {
 
   .panel {
     padding: var(--space-4);
+  }
+
+  .batch__field {
+    max-width: none;
   }
 
   .btn {
@@ -695,5 +1208,22 @@ body {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+/* --- Переключатель языка (та же группа табов, что и навигация) --- */
+.lang-switch {
+  align-items: center;
+  margin-inline-start: var(--space-2);
+  flex: none;
+}
+@media (max-width: 1024px) {
+  .lang-switch { margin-inline-start: var(--space-1); }
+}
+@media (max-width: 640px) {
+  .lang-switch {
+    order: 4;
+    margin-inline-start: auto;
+    margin-top: var(--space-1);
   }
 }

@@ -24,6 +24,13 @@
       "invalidResponse": "Invalid server response"
     }
   },
+  "loader": {
+    "label": "Loading…",
+    "progress": "Processed {{processed}} of {{total}}"
+  },
+  "errorBanner": {
+    "details": "Technical details"
+  },
   "fileUpload": {
     "inputLabel": "Product cards file selection",
     "idle": "Click to choose a file",
@@ -61,6 +68,32 @@
     "ready": "Card is ready for processing",
     "clear": "Clear text"
   },
+  "batch": {
+    "title": "Batch processing",
+    "run": "Process",
+    "reset": "Reset",
+    "newBatch": "New batch",
+    "progress": "Processed {{processed}} of {{total}}",
+    "errorsCount": "Processing errors: {{count}}",
+    "rangeHint": "Allowed: {{min}} to {{max}}",
+    "rangeError": "Value out of range from {{min}} to {{max}}",
+    "status": {
+      "idle": "Waiting to start",
+      "running": "Processing",
+      "done": "Completed",
+      "doneWithErrors": "Completed with errors",
+      "error": "Error"
+    },
+    "batchSize": {
+      "label": "Batch size"
+    },
+    "threshold": {
+      "label": "Confidence threshold"
+    },
+    "errors": {
+      "noCards": "No valid cards to process"
+    }
+  },
   "preview": {
     "title": "Data preview",
     "empty": "No data to preview",
@@ -83,5 +116,65 @@
       "missingFields": "Missing fields: {{fields}}",
       "noContent": "The data has none of the title, description or seller_attributes fields"
     }
+  },
+  "results": {
+    "summary": {
+      "total": "Cards processed",
+      "ok": "Succeeded",
+      "lowConfidence": "Low confidence",
+      "errors": "Errors",
+      "needsReview": "Requiring review",
+      "batchId": "Batch",
+      "pipelineVersion": "Pipeline version",
+      "processingTime": "Processing time, ms"
+    },
+    "status": {
+      "ok": "Succeeded",
+      "low_confidence": "Low confidence",
+      "partial": "Partial",
+      "error": "Error",
+      "skipped": "Skipped"
+    },
+    "needsReview": {
+      "yes": "Requires review",
+      "no": "No review required"
+    },
+    "export": {
+      "label": "Download CSV",
+      "ariaLabel": "Export results as CSV"
+    },
+    "table": {
+      "caption": "Product card processing results",
+      "empty": "No results to display",
+      "emptyAttributes": "No attributes extracted",
+      "expand": "Show attributes",
+      "collapse": "Hide attributes",
+      "columns": {
+        "product": "Card",
+        "category": "Category",
+        "status": "Status",
+        "needsReview": "Review",
+        "lowConfidenceCount": "Below threshold",
+        "processingTime": "Time, ms",
+        "action": "Row actions"
+      },
+      "attributes": {
+        "attribute": "Attribute",
+        "value": "Value",
+        "confidence": "Confidence",
+        "confidenceLow": "below threshold",
+        "method": "Method",
+        "evidence": "Evidence",
+        "noEvidence": "No evidence found",
+        "confirmed": "Confirmed in text",
+        "notConfirmed": "Not confirmed in text",
+        "sources": "Sources"
+      }
+    }
+  },
+  "lang": {
+    "ru": "RU",
+    "en": "EN",
+    "ariaLabel": "Switch language"
   }
 }

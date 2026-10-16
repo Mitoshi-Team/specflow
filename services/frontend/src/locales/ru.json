@@ -24,6 +24,13 @@
       "invalidResponse": "Некорректный ответ сервера"
     }
   },
+  "loader": {
+    "label": "Загрузка…",
+    "progress": "Обработано {{processed}} из {{total}}"
+  },
+  "errorBanner": {
+    "details": "Технические детали"
+  },
   "fileUpload": {
     "inputLabel": "Выбор файла карточек",
     "idle": "Нажмите, чтобы выбрать файл",
@@ -61,6 +68,32 @@
     "ready": "Карточка готова к обработке",
     "clear": "Очистить текст"
   },
+  "batch": {
+    "title": "Обработка батча",
+    "run": "Обработать",
+    "reset": "Сброс",
+    "newBatch": "Новый батч",
+    "progress": "Обработано {{processed}} из {{total}}",
+    "errorsCount": "Ошибок обработки: {{count}}",
+    "rangeHint": "Допустимо: от {{min}} до {{max}}",
+    "rangeError": "Значение вне диапазона от {{min}} до {{max}}",
+    "status": {
+      "idle": "Ожидает запуска",
+      "running": "Обрабатывается",
+      "done": "Завершён",
+      "doneWithErrors": "Завершён с ошибками",
+      "error": "Ошибка"
+    },
+    "batchSize": {
+      "label": "Размер батча"
+    },
+    "threshold": {
+      "label": "Порог уверенности"
+    },
+    "errors": {
+      "noCards": "Нет валидных карточек для обработки"
+    }
+  },
   "preview": {
     "title": "Предпросмотр данных",
     "empty": "Нет данных для предпросмотра",
@@ -83,5 +116,65 @@
       "missingFields": "Отсутствуют поля: {{fields}}",
       "noContent": "В данных нет ни одного из полей title, description или seller_attributes"
     }
+  },
+  "results": {
+    "summary": {
+      "total": "Обработано карточек",
+      "ok": "Успешно",
+      "lowConfidence": "Низкая уверенность",
+      "errors": "Ошибки",
+      "needsReview": "Требуют проверки",
+      "batchId": "Батч",
+      "pipelineVersion": "Версия пайплайна",
+      "processingTime": "Время обработки, мс"
+    },
+    "status": {
+      "ok": "Успешно",
+      "low_confidence": "Низкая уверенность",
+      "partial": "Частично",
+      "error": "Ошибка",
+      "skipped": "Пропущено"
+    },
+    "needsReview": {
+      "yes": "Требует проверки",
+      "no": "Не требует проверки"
+    },
+    "export": {
+      "label": "Скачать CSV",
+      "ariaLabel": "Экспорт результатов в формате CSV"
+    },
+    "table": {
+      "caption": "Результаты обработки карточек",
+      "empty": "Нет результатов для отображения",
+      "emptyAttributes": "Атрибуты не извлечены",
+      "expand": "Показать атрибуты",
+      "collapse": "Свернуть атрибуты",
+      "columns": {
+        "product": "Карточка",
+        "category": "Категория",
+        "status": "Статус",
+        "needsReview": "Проверка",
+        "lowConfidenceCount": "Ниже порога",
+        "processingTime": "Время, мс",
+        "action": "Действия со строкой"
+      },
+      "attributes": {
+        "attribute": "Атрибут",
+        "value": "Значение",
+        "confidence": "Уверенность",
+        "confidenceLow": "ниже порога",
+        "method": "Метод",
+        "evidence": "Подтверждение",
+        "noEvidence": "Подтверждение не найдено",
+        "confirmed": "Подтверждено в тексте",
+        "notConfirmed": "Не подтверждено в тексте",
+        "sources": "Источники"
+      }
+    }
+  },
+  "lang": {
+    "ru": "RU",
+    "en": "EN",
+    "ariaLabel": "Переключить язык"
   }
 }

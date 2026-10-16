@@ -110,35 +110,54 @@ body {
   text-overflow: ellipsis;
 }
 
-.header__nav {
+.header__nav,
+.lang-switch {
   display: flex;
   gap: var(--space-1);
+}
+
+.header__nav {
   margin-inline-start: auto;
 }
 
-.header__nav-link {
+/*
+ * Общий таб шапки: используется и ссылками навигации по страницам, и
+ * кнопками переключателя языка, чтобы отступы, скругление, типографика
+ * и состояния совпадали без дублирования стилей.
+ */
+.header__tab {
   display: inline-flex;
   align-items: center;
   min-height: 32px;
   padding: 0 var(--space-3);
+  border: none;
   border-radius: var(--radius-control);
+  background: transparent;
   color: var(--text-secondary);
   text-decoration: none;
+  font-family: var(--font-sans);
   font-size: var(--text-body);
+  cursor: pointer;
   transition:
     color var(--transition-fast),
     background-color var(--transition-fast);
 }
 
-.header__nav-link:hover {
+.header__tab:hover {
   color: var(--text-primary);
   background: var(--surface-2);
 }
 
-.header__nav-link.active {
+.header__tab.active,
+.header__tab--active {
   color: var(--text-primary);
   background: var(--highlight-soft);
   font-weight: 500;
+}
+
+.header__tab:focus-visible {
+  outline: 2px solid var(--highlight);
+  outline-offset: 2px;
 }
 
 /* --- Страницы --- */
@@ -1013,7 +1032,7 @@ body {
     margin-inline-start: 0;
   }
 
-  .header__nav-link {
+  .header__tab {
     min-height: var(--control-height-touch);
   }
 
@@ -1043,5 +1062,22 @@ body {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+/* --- Переключатель языка (та же группа табов, что и навигация) --- */
+.lang-switch {
+  align-items: center;
+  margin-inline-start: var(--space-2);
+  flex: none;
+}
+@media (max-width: 1024px) {
+  .lang-switch { margin-inline-start: var(--space-1); }
+}
+@media (max-width: 640px) {
+  .lang-switch {
+    order: 4;
+    margin-inline-start: auto;
+    margin-top: var(--space-1);
   }
 }

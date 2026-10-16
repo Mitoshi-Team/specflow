@@ -24,6 +24,13 @@
       "invalidResponse": "Invalid server response"
     }
   },
+  "loader": {
+    "label": "Loading…",
+    "progress": "Processed {{processed}} of {{total}}"
+  },
+  "errorBanner": {
+    "details": "Technical details"
+  },
   "fileUpload": {
     "inputLabel": "Product cards file selection",
     "idle": "Click to choose a file",
@@ -52,6 +59,7 @@
     "title": "Batch processing",
     "run": "Process",
     "reset": "Reset",
+    "newBatch": "New batch",
     "progress": "Processed {{processed}} of {{total}}",
     "errorsCount": "Processing errors: {{count}}",
     "rangeHint": "Allowed: {{min}} to {{max}}",

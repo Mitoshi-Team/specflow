@@ -18,6 +18,7 @@ import type {
   BatchStatus,
 } from "../hooks/useBatchExtract";
 import type { BatchExtractResponse, ProductCardRequest } from "../schemas/api";
+import ErrorBanner from "./ErrorBanner";
 
 export type BatchControlsProps = {
   /** Разобранные карточки: кнопка активна только при непустом наборе. */
@@ -252,26 +253,7 @@ export default function BatchControls({
         ) : null}
       </div>
 
-      {error ? (
-        <div className="batch__error" role="alert">
-          <p className="batch__error-message">{t(error.message)}</p>
-          {error.status > 0 ? (
-            <p className="batch__error-detail">{`HTTP ${error.status}`}</p>
-          ) : null}
-          {error.detail ? (
-            <p className="batch__error-detail">{error.detail}</p>
-          ) : null}
-          {error.errors && error.errors.length > 0 ? (
-            <ul className="batch__error-list">
-              {error.errors.map((item) => (
-                <li key={`${item.loc.join(".")}:${item.msg}`}>
-                  {`${item.loc.join(".")}: ${item.msg}`}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
+      {error ? <ErrorBanner error={error} /> : null}
     </div>
   );
 }

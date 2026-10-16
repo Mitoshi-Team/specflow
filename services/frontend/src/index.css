@@ -202,6 +202,12 @@ body {
   color: var(--text-muted);
 }
 
+.panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 /* --- Кнопки и ссылки-действия --- */
 
 .btn {
@@ -570,7 +576,9 @@ body {
   color: var(--text-secondary);
 }
 
-.batch__error {
+/* --- Баннер ошибки (frontend.md, 6.2 ErrorBanner; design.md, §7) --- */
+
+.error-banner {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -580,24 +588,81 @@ body {
   border-radius: var(--radius-panel);
 }
 
-.batch__error-message {
+.error-banner__message {
   margin: 0;
   font-weight: 500;
   color: var(--danger);
 }
 
-.batch__error-detail {
-  margin: 0;
+.error-banner__summary {
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.error-banner__detail {
+  margin: var(--space-1) 0 0;
   font-size: var(--text-caption);
   color: var(--text-secondary);
 }
 
-.batch__error-list {
-  margin: 0;
+.error-banner__list {
+  margin: var(--space-1) 0 0;
   padding-inline-start: var(--space-4);
   font-family: var(--font-mono);
   font-size: var(--text-micro);
   color: var(--text-secondary);
+}
+
+/* --- Индикатор загрузки (frontend.md, 6.2 Loader; design.md, §7, §11, §12) --- */
+
+.loader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.loader--inline {
+  flex-direction: row;
+  align-items: center;
+}
+
+.loader__spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-primary);
+  border-radius: 50%;
+  animation: loader-spin 0.8s linear infinite;
+}
+
+.loader__label {
+  font-size: var(--text-body);
+  color: var(--text-secondary);
+}
+
+.loader__bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-control);
+}
+
+.loader__bar-fill {
+  height: 100%;
+  background: var(--highlight);
+  transition: width var(--transition-fast);
+}
+
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* --- Сводка валидации (frontend.md, 6.3) --- */

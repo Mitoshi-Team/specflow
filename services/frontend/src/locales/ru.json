@@ -24,6 +24,13 @@
       "invalidResponse": "Некорректный ответ сервера"
     }
   },
+  "loader": {
+    "label": "Загрузка…",
+    "progress": "Обработано {{processed}} из {{total}}"
+  },
+  "errorBanner": {
+    "details": "Технические детали"
+  },
   "fileUpload": {
     "inputLabel": "Выбор файла карточек",
     "idle": "Нажмите, чтобы выбрать файл",
@@ -52,6 +59,7 @@
     "title": "Обработка батча",
     "run": "Обработать",
     "reset": "Сброс",
+    "newBatch": "Новый батч",
     "progress": "Обработано {{processed}} из {{total}}",
     "errorsCount": "Ошибок обработки: {{count}}",
     "rangeHint": "Допустимо: от {{min}} до {{max}}",

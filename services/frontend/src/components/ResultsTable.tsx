@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { ExtractionResponseItem } from "../schemas/api";
 import AttributesTable from "./AttributesTable";
+import EmptyState from "./EmptyState";
 
 /**
  * Метка отсутствующего значения (design.md, §7: пустые поля показываются
@@ -57,11 +58,7 @@ export default function ResultsTable({
   };
 
   if (results.length === 0) {
-    return (
-      <p className="empty-state" role="status">
-        {t("results.table.empty")}
-      </p>
-    );
+    return <EmptyState message={t("results.table.empty")} />;
   }
 
   return (

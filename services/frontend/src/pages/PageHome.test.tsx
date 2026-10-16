@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "../i18n";
@@ -77,5 +83,44 @@ describe("PageHome", () => {
 
     expect(screen.queryByText("Предпросмотр данных")).toBeNull();
     expect(useFileParserMock).toHaveBeenLastCalledWith(null);
+  });
+
+  it("переключается на текстовый режим и показывает предпросмотр карточки", () => {
+    render(<PageHome />);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Текст карточки" }));
+
+    expect(screen.queryByLabelText("Выбор файла карточек")).toBeNull();
+    expect(screen.queryByText("Предпросмотр данных")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Описание карточки"), {
+      target: { value: "  Ручная кофемолка  " },
+    });
+
+    const preview = screen.getByText("Предпросмотр данных").closest("section");
+    expect(preview).not.toBeNull();
+    expect(
+      within(preview as HTMLElement).getByText("Ручная кофемолка"),
+    ).toBeDefined();
+    expect(
+      within(preview as HTMLElement).getByText("Текст карточки"),
+    ).toBeDefined();
+    expect(
+      within(preview as HTMLElement).getByText("Карточек: 1"),
+    ).toBeDefined();
+  });
+
+  it("возвращает загрузку файла при переключении режима обратно", () => {
+    render(<PageHome />);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Текст карточки" }));
+    fireEvent.change(screen.getByLabelText("Описание карточки"), {
+      target: { value: "Ручная кофемолка" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Файл" }));
+
+    expect(screen.getByLabelText("Выбор файла карточек")).toBeDefined();
+    expect(screen.queryByLabelText("Описание карточки")).toBeNull();
+    expect(screen.queryByText("Предпросмотр данных")).toBeNull();
   });
 });

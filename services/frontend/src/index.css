@@ -353,6 +353,148 @@ body {
   border-color: var(--text-secondary);
 }
 
+/* --- Переключатель способа загрузки --- */
+
+.mode-switch {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-self: center;
+  margin: 0;
+  padding: var(--space-1);
+  min-width: 0;
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.mode-switch:has(.mode-switch__input:disabled) {
+  opacity: 0.55;
+}
+
+.mode-switch__option {
+  display: inline-flex;
+}
+
+/* Скрытая radio-кнопка: состояние и фокус показывает подпись рядом. */
+.mode-switch__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mode-switch__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--radius-control) - 2px);
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.mode-switch__label:hover {
+  color: var(--text-primary);
+}
+
+.mode-switch__input:checked + .mode-switch__label {
+  color: var(--text-primary);
+  background: var(--highlight-soft);
+  font-weight: 500;
+}
+
+.mode-switch__input:focus-visible + .mode-switch__label {
+  outline: 2px solid var(--highlight);
+  outline-offset: 2px;
+}
+
+.mode-switch__input:disabled + .mode-switch__label {
+  cursor: not-allowed;
+}
+
+.mode-switch:has(.mode-switch__input:disabled) .mode-switch__label:hover {
+  color: var(--text-secondary);
+}
+
+/* --- Описание одной карточки текстом --- */
+
+.card-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.card-text__label {
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.card-text__textarea {
+  width: 100%;
+  /* Высота задаётся из `CardTextInput` по содержимому (в границах
+     CARD_TEXT_MIN_HEIGHT_PX / CARD_TEXT_MAX_HEIGHT_PX). */
+  overflow-y: auto;
+  padding: var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: 1.55;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-panel);
+  /* Ручное растягивание отключено: поле само растёт по числу строк. */
+  resize: none;
+  transition: border-color var(--transition-fast);
+}
+
+.card-text__textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.card-text__textarea:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+.card-text__textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.card-text--ready .card-text__textarea {
+  border-color: var(--text-secondary);
+}
+
+.card-text__status,
+.card-text__hint {
+  margin: 0;
+  font-size: var(--text-caption);
+}
+
+.card-text__status {
+  color: var(--text-muted);
+}
+
+.card-text--ready .card-text__status {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.card-text__hint {
+  color: var(--text-muted);
+}
+
 /* --- Предпросмотр --- */
 
 .preview__scroll {
@@ -536,6 +678,10 @@ body {
   }
 
   .btn {
+    min-height: var(--control-height-touch);
+  }
+
+  .mode-switch__label {
     min-height: var(--control-height-touch);
   }
 }

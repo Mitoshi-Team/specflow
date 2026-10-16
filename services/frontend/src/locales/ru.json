@@ -95,5 +95,56 @@
       "missingFields": "Отсутствуют поля: {{fields}}",
       "noContent": "В данных нет ни одного из полей title, description или seller_attributes"
     }
+  },
+  "results": {
+    "summary": {
+      "total": "Обработано карточек",
+      "ok": "Успешно",
+      "lowConfidence": "Низкая уверенность",
+      "errors": "Ошибки",
+      "needsReview": "Требуют проверки",
+      "batchId": "Батч",
+      "pipelineVersion": "Версия пайплайна",
+      "processingTime": "Время обработки, мс"
+    },
+    "status": {
+      "ok": "Успешно",
+      "low_confidence": "Низкая уверенность",
+      "partial": "Частично",
+      "error": "Ошибка",
+      "skipped": "Пропущено"
+    },
+    "needsReview": {
+      "yes": "Требует проверки",
+      "no": "Не требует проверки"
+    },
+    "table": {
+      "caption": "Результаты обработки карточек",
+      "empty": "Нет результатов для отображения",
+      "emptyAttributes": "Атрибуты не извлечены",
+      "expand": "Показать атрибуты",
+      "collapse": "Свернуть атрибуты",
+      "columns": {
+        "product": "Карточка",
+        "category": "Категория",
+        "status": "Статус",
+        "needsReview": "Проверка",
+        "lowConfidenceCount": "Ниже порога",
+        "processingTime": "Время, мс",
+        "action": "Действия со строкой"
+      },
+      "attributes": {
+        "attribute": "Атрибут",
+        "value": "Значение",
+        "confidence": "Уверенность",
+        "confidenceLow": "ниже порога",
+        "method": "Метод",
+        "evidence": "Подтверждение",
+        "noEvidence": "Подтверждение не найдено",
+        "confirmed": "Подтверждено в тексте",
+        "notConfirmed": "Не подтверждено в тексте",
+        "sources": "Источники"
+      }
+    }
   }
 }

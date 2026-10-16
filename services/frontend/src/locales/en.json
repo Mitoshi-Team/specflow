@@ -95,5 +95,56 @@
       "missingFields": "Missing fields: {{fields}}",
       "noContent": "The data has none of the title, description or seller_attributes fields"
     }
+  },
+  "results": {
+    "summary": {
+      "total": "Cards processed",
+      "ok": "Succeeded",
+      "lowConfidence": "Low confidence",
+      "errors": "Errors",
+      "needsReview": "Requiring review",
+      "batchId": "Batch",
+      "pipelineVersion": "Pipeline version",
+      "processingTime": "Processing time, ms"
+    },
+    "status": {
+      "ok": "Succeeded",
+      "low_confidence": "Low confidence",
+      "partial": "Partial",
+      "error": "Error",
+      "skipped": "Skipped"
+    },
+    "needsReview": {
+      "yes": "Requires review",
+      "no": "No review required"
+    },
+    "table": {
+      "caption": "Product card processing results",
+      "empty": "No results to display",
+      "emptyAttributes": "No attributes extracted",
+      "expand": "Show attributes",
+      "collapse": "Hide attributes",
+      "columns": {
+        "product": "Card",
+        "category": "Category",
+        "status": "Status",
+        "needsReview": "Review",
+        "lowConfidenceCount": "Below threshold",
+        "processingTime": "Time, ms",
+        "action": "Row actions"
+      },
+      "attributes": {
+        "attribute": "Attribute",
+        "value": "Value",
+        "confidence": "Confidence",
+        "confidenceLow": "below threshold",
+        "method": "Method",
+        "evidence": "Evidence",
+        "noEvidence": "No evidence found",
+        "confirmed": "Confirmed in text",
+        "notConfirmed": "Not confirmed in text",
+        "sources": "Sources"
+      }
+    }
   }
 }

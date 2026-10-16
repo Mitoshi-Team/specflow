@@ -1,11 +1,8 @@
 import { Fragment, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type {
-  AttributePrediction,
-  ExtractionResponseItem,
-  Span,
-} from "../schemas/api";
+import type { ExtractionResponseItem } from "../schemas/api";
+import AttributesTable from "./AttributesTable";
 
 /**
  * Метка отсутствующего значения (design.md, §7: пустые поля показываются
@@ -24,120 +21,6 @@ export type ResultsTableProps = {
    */
   threshold?: number;
 };
-
-/** Текст упоминания в исходном тексте: `field: text [start–end]`. */
-function spanLabel(span: Span): string {
-  const range =
-    span.start !== undefined && span.end !== undefined
-      ? ` [${span.start}–${span.end}]`
-      : "";
-  return `${span.field}: ${span.text}${range}`;
-}
-
-type AttributesBlockProps = {
-  attributes: AttributePrediction[];
-  threshold?: number;
-};
-
-/**
- * Таблица атрибутов карточки (frontend.md, 6.2; design.md, §7–9):
- * `attribute_code`, `normalized_value`, `confidence`, `extraction_method`,
- * `evidence_text`, `source_spans`, `is_confirmed_in_text`.
- *
- * Числовое значение уверенности показывается всегда; при заданном пороге
- * значение ниже порога дополнительно выделяется текстовой пометкой, а не
- * только цветом (design.md, §8, §11). Отсутствующее подтверждение явно
- * помечается, а не придумывается (design.md, §7).
- */
-function AttributesBlock({ attributes, threshold }: AttributesBlockProps) {
-  const { t } = useTranslation();
-
-  if (attributes.length === 0) {
-    return (
-      <p className="results-table__empty-attributes">
-        {t("results.table.emptyAttributes")}
-      </p>
-    );
-  }
-
-  return (
-    <table className="results-table__attributes">
-      <thead>
-        <tr>
-          <th scope="col">{t("results.table.attributes.attribute")}</th>
-          <th scope="col">{t("results.table.attributes.value")}</th>
-          <th scope="col">{t("results.table.attributes.confidence")}</th>
-          <th scope="col">{t("results.table.attributes.method")}</th>
-          <th scope="col">{t("results.table.attributes.evidence")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {attributes.map((attribute, index) => {
-          const isLow =
-            threshold !== undefined && attribute.confidence < threshold;
-          return (
-            <tr key={`${attribute.attribute_code}-${index}`}>
-              <td className="results-table__code">
-                {attribute.attribute_code}
-              </td>
-              <td className="results-table__value">
-                {attribute.normalized_value}
-              </td>
-              <td className="results-table__number">
-                <span
-                  className={`confidence${isLow ? " confidence--low" : ""}`}
-                >
-                  {attribute.confidence}
-                  {isLow ? (
-                    <span className="sr-only">
-                      {" "}
-                      {t("results.table.attributes.confidenceLow")}
-                    </span>
-                  ) : null}
-                </span>
-              </td>
-              <td className="results-table__method">
-                {attribute.extraction_method}
-              </td>
-              <td className="results-table__evidence">
-                {attribute.evidence_text ? (
-                  <span className="results-table__quote">
-                    {attribute.evidence_text}
-                  </span>
-                ) : (
-                  <span className="results-table__muted">
-                    {t("results.table.attributes.noEvidence")}
-                  </span>
-                )}
-
-                {attribute.source_spans &&
-                attribute.source_spans.length > 0 ? (
-                  <ul className="results-table__spans">
-                    {attribute.source_spans.map((span, spanIndex) => (
-                      <li key={spanIndex}>{spanLabel(span)}</li>
-                    ))}
-                  </ul>
-                ) : null}
-
-                <span
-                  className={`results-table__confirmed${
-                    attribute.is_confirmed_in_text
-                      ? ""
-                      : " results-table__confirmed--no"
-                  }`}
-                >
-                  {attribute.is_confirmed_in_text
-                    ? t("results.table.attributes.confirmed")
-                    : t("results.table.attributes.notConfirmed")}
-                </span>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
 
 /** Число колонок основной таблицы — нужно для `colSpan` блока атрибутов. */
 const COLUMN_COUNT = 7;
@@ -253,7 +136,7 @@ export default function ResultsTable({
                       id={detailsId}
                       colSpan={COLUMN_COUNT}
                     >
-                      <AttributesBlock
+                      <AttributesTable
                         attributes={result.attributes}
                         threshold={threshold}
                       />

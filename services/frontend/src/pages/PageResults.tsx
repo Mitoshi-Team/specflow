@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 
+import EmptyState from "../components/EmptyState";
+
 /**
  * Страница результатов пакетной обработки (frontend.md, сценарий 3).
  * Таблица результатов появится после запуска батча — до тех пор
@@ -15,9 +17,7 @@ export default function PageResults() {
         <p className="page__description">{t("pages.results.description")}</p>
       </div>
 
-      <div className="empty-state" role="status">
-        {t("pages.results.empty")}
-      </div>
+      <EmptyState message={t("pages.results.empty")} />
     </section>
   );
 }

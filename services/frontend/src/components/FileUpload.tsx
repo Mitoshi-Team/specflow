@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ACCEPTED_FILE_EXTENSIONS, MAX_UPLOAD_SIZE_BYTES } from "../constants";
 import type { FileParseError } from "../lib/fileParser";
 import { formatFileSize } from "../lib/format";
+import Loader from "./Loader";
 
 /** Статус загрузчика, соответствующий состояниям парсера. */
 export type FileUploadStatus = "idle" | "parsing" | "success" | "error";
@@ -87,14 +88,18 @@ export default function FileUpload({
           disabled={!isInteractive}
           onChange={handleInputChange}
         />
-        <span className="file-upload__status" role="status">
-          <span className="file-upload__title">{statusText}</span>
-          {status === "success" && cardCount !== undefined ? (
-            <span className="file-upload__count">
-              {t("fileUpload.cardCount", { total: cardCount })}
-            </span>
-          ) : null}
-        </span>
+        {isBusy ? (
+          <Loader label={statusText} inline />
+        ) : (
+          <span className="file-upload__status" role="status">
+            <span className="file-upload__title">{statusText}</span>
+            {status === "success" && cardCount !== undefined ? (
+              <span className="file-upload__count">
+                {t("fileUpload.cardCount", { total: cardCount })}
+              </span>
+            ) : null}
+          </span>
+        )}
         <span className="file-upload__hint">
           {t("fileUpload.hint", {
             size: formatFileSize(MAX_UPLOAD_SIZE_BYTES),

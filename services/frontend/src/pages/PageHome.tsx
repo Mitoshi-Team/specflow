@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 import BatchControls from "../components/BatchControls";
 import DataPreview from "../components/DataPreview";
@@ -18,6 +19,7 @@ import { formatFileSize } from "../lib/format";
  */
 export default function PageHome() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const sectionIds = useId();
   const [file, setFile] = useState<File | null>(null);
   const parser = useFileParser(file);
@@ -30,6 +32,18 @@ export default function PageHome() {
   const cardCountText = t("fileUpload.cardCount", {
     total: parser.cards.length,
   });
+
+  // Кнопка «Новый батч» доступна, когда есть что сбрасывать: выбранный файл
+  // или запущенный батч (frontend.md, раздел 8.2).
+  const canStartNewBatch = file !== null || batch.status !== "idle";
+
+  const handleNewBatch = (): void => {
+    // Сброс текущих данных и состояния батча; во время выполнения кнопка
+    // заблокирована, поэтому поздний ответ не перезаписывает сброс.
+    batch.reset();
+    setFile(null);
+    navigate("/");
+  };
 
   return (
     <section className="page">
@@ -81,6 +95,18 @@ export default function PageHome() {
           <h2 className="panel__title" id={batchTitleId}>
             {t("batch.title")}
           </h2>
+          {canStartNewBatch ? (
+            <div className="panel__actions">
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={batch.status === "running"}
+                onClick={handleNewBatch}
+              >
+                {t("batch.newBatch")}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <BatchControls

@@ -46,6 +46,14 @@ export const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024;
 export const PREVIEW_MAX_ROWS = 20;
 
 /**
+ * Границы высоты поля описания одной карточки (px). Ниже поля не хватает
+ * даже на несколько строк, выше — включается внутренний скролл, чтобы
+ * текстовое поле нельзя было растянуть бесконечно (`CardTextInput`).
+ */
+export const CARD_TEXT_MIN_HEIGHT_PX = 160;
+export const CARD_TEXT_MAX_HEIGHT_PX = 480;
+
+/**
  * Размер батча по умолчанию (frontend.md, 9.2: `VITE_DEFAULT_BATCH_SIZE=10`;
  * сценарий 2 — «`batch_size` по умолчанию 10–20, макс. 50»).
  */

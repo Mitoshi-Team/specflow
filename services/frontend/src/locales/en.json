@@ -53,7 +53,20 @@
     }
   },
   "upload": {
-    "title": "Upload cards"
+    "title": "Upload cards",
+    "mode": {
+      "label": "Upload mode",
+      "file": "File",
+      "text": "Card text"
+    }
+  },
+  "textInput": {
+    "label": "Card description",
+    "placeholder": "e.g. manual coffee grinder, 38 mm steel burrs, 30 g capacity, black",
+    "hint": "The pasted text becomes the description of a single card (the description field).",
+    "idle": "Paste a card description",
+    "ready": "Card is ready for processing",
+    "clear": "Clear text"
   },
   "batch": {
     "title": "Batch processing",

@@ -118,6 +118,10 @@
       "yes": "Requires review",
       "no": "No review required"
     },
+    "export": {
+      "label": "Download CSV",
+      "ariaLabel": "Export results as CSV"
+    },
     "table": {
       "caption": "Product card processing results",
       "empty": "No results to display",

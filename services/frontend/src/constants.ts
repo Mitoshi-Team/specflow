@@ -11,6 +11,21 @@ export const ACCEPTED_FILE_EXTENSIONS = [".csv", ".json", ".tsv"] as const;
 /** Разделитель полей CSV-файла (frontend.md, 5.4). */
 export const CSV_DELIMITER = ",";
 
+/**
+ * Имя CSV-файла с предсказаниями по умолчанию (frontend.md, 5.4).
+ *
+ * ⚠️ В спецификациях имя файла не задано; значение принято по умолчанию и
+ * вынесено сюда, чтобы не хранить строку inline в бизнес-логике (rules.md).
+ */
+export const PREDICTIONS_CSV_FILENAME = "predictions.csv";
+
+/**
+ * MIME-тип CSV-файла предсказаний. Кодировка UTF-8 задана спецификацией
+ * (frontend.md, 5.4); BOM не добавляется, так как спецификация его не
+ * требует.
+ */
+export const CSV_MIME_TYPE = "text/csv;charset=utf-8";
+
 /** Разделитель полей TSV-файла. */
 export const TSV_DELIMITER = "\t";
 

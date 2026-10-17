@@ -4,9 +4,13 @@ from pydantic import ValidationError
 from attribute_extractor.config import Settings
 from attribute_extractor.constants import (
     DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_MATCH_THRESHOLD,
     DEFAULT_MAX_BATCH_SIZE,
     DEFAULT_PIPELINE_VERSION,
     DEFAULT_RULES_VERSION,
+    DEFAULT_VECTOR_BACKEND,
+    DEFAULT_VECTOR_K,
     DEFAULT_VOCAB_VERSION,
     REVIEW_CONFIDENCE_THRESHOLD,
     SERVICE_VERSION,
@@ -31,6 +35,32 @@ def test_max_batch_size_matches_api_contract() -> None:
     config = Settings(_env_file=None)
 
     assert config.max_batch_size == MAX_BATCH_SIZE
+
+
+def test_vector_settings_defaults() -> None:
+    config = Settings(_env_file=None)
+
+    assert config.vector_backend == DEFAULT_VECTOR_BACKEND
+    assert config.embedding_model == DEFAULT_EMBEDDING_MODEL
+    assert config.match_threshold == DEFAULT_MATCH_THRESHOLD
+    assert config.vector_k == DEFAULT_VECTOR_K
+
+
+def test_vector_backend_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EXTRACTOR_VECTOR_BACKEND", "bogus")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_vector_settings_environment_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EXTRACTOR_VECTOR_BACKEND", "lexical")
+    monkeypatch.setenv("EXTRACTOR_VECTOR_K", "3")
+
+    config = Settings(_env_file=None)
+
+    assert config.vector_backend == "lexical"
+    assert config.vector_k == 3
 
 
 def test_aggregation_settings_absent_per_spec() -> None:

@@ -207,9 +207,6 @@ NUMBER_WORD_HYPHEN_PATTERN = r"(?<=\d)-(?=[^\W\d_])"
 TOKEN_SEPARATOR_PATTERN = r"[/\\,;_]"
 """Разделители внутри слипшихся токенов (``i7-13620H/16Гб``, ``серый,``)."""
 
-HTML_TAG_PATTERN = r"<[^>]*>"
-"""HTML-теги в описаниях (``<br>``, ``<b>``), разрывающие токены."""
-
 GROUNDING_UNIT_ALIASES = {
     "гб": "gb",
     "gb": "gb",

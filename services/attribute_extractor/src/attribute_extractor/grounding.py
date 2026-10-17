@@ -80,13 +80,15 @@ def _seller_attributes_text(seller_attributes: dict | list | None) -> str | None
 
     ``str()`` над словарём добавляет кавычки и двоеточия, из-за чего значения
     перестают находиться по токенам; ключи и значения склеиваются через
-    пробел с сохранением исходных значений.
+    пробел, а сами атрибуты разделяются точкой с запятой — это сохраняет
+    границы предложений для фильтра служебных вставок (``Продавец ...`` не
+    съедает остальные атрибуты).
     """
     if not seller_attributes:
         return None
     if isinstance(seller_attributes, dict):
-        return " ".join(f"{key} {value}" for key, value in seller_attributes.items())
-    return " ".join(str(item) for item in seller_attributes)
+        return "; ".join(f"{key} {value}" for key, value in seller_attributes.items())
+    return "; ".join(str(item) for item in seller_attributes)
 
 
 class GroundingValidator:

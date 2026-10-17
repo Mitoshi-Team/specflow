@@ -138,6 +138,20 @@ def test_html_entity_nbsp_is_grounded() -> None:
     assert validator.is_grounded(candidate, card) is True
 
 
+def test_seller_attributes_noise_marker_keeps_following_values() -> None:
+    """Маркер «Продавец» не съедает значения следующих атрибутов продавца."""
+    validator = GroundingValidator()
+    card = ProductCard(
+        title="Смартфон Apple iPhone 17 Pro 256 ГБ",
+        seller_attributes={
+            "Продавец": "ИП Бирюзов Евгений Анатольевич",
+            "Цвет": "синий",
+        },
+    )
+    candidate = _candidate("синий", code="color")
+    assert validator.is_grounded(candidate, card) is True
+
+
 def test_battery_asterisk_variant_is_grounded() -> None:
     """Типографский вариант «мА*ч» сопоставляется с каноническим «мА·ч»."""
     validator = GroundingValidator()

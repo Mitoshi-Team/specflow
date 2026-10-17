@@ -13,7 +13,8 @@ dependencies = [
 
 [project.optional-dependencies]
 # Семантический VectorIndex (резолв полей). Без него работает лексический fallback.
-embeddings = ["sentence-transformers>=3"]
+# torch — CPU-only из pytorch-cpu (см. tool.uv.sources в корне).
+embeddings = ["sentence-transformers>=3", "torch>=2"]
 
 [build-system]
 requires = ["hatchling"]

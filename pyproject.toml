@@ -18,6 +18,14 @@ members = ["services/contracts", "services/api_gateway", "services/attribute_ext
 api-gateway = { workspace = true }
 attribute-extractor = { workspace = true }
 specflow-contracts = { workspace = true }
+# Semantic VectorIndex считает на CPU — torch берём из CPU-индекса PyTorch,
+# чтобы не тянуть CUDA/nvidia-зависимости (extra `embeddings`).
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [dependency-groups]
 dev = [

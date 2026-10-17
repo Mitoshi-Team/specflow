@@ -138,17 +138,19 @@ def test_html_entity_nbsp_is_grounded() -> None:
     assert validator.is_grounded(candidate, card) is True
 
 
-def test_seller_attributes_noise_marker_keeps_following_values() -> None:
-    """Маркер «Продавец» не съедает значения следующих атрибутов продавца."""
+def test_trailing_sentence_dot_does_not_break_token() -> None:
+    """Точка в конце предложения не склеивается с токеном («50 дюймов.»)."""
     validator = GroundingValidator()
-    card = ProductCard(
-        title="Смартфон Apple iPhone 17 Pro 256 ГБ",
-        seller_attributes={
-            "Продавец": "ИП Бирюзов Евгений Анатольевич",
-            "Цвет": "синий",
-        },
-    )
-    candidate = _candidate("синий", code="color")
+    card = ProductCard(description="Телевизор Dreame: диагональ экрана — 50 дюймов.")
+    candidate = _candidate("50 дюйм", code="diagonal")
+    assert validator.is_grounded(candidate, card) is True
+
+
+def test_decimal_survives_sentence_dot() -> None:
+    """Десятичная точка не отделяется от числа («Экран 6.7.»)."""
+    validator = GroundingValidator()
+    card = ProductCard(description="Экран 6.7. Матрица IPS")
+    candidate = _candidate("6,7", evidence="6.7")
     assert validator.is_grounded(candidate, card) is True
 
 
@@ -184,27 +186,50 @@ def test_token_match_is_exact() -> None:
     assert validator.is_grounded(candidate, card) is False
 
 
-def test_seller_attributes_are_searchable() -> None:
-    """Значения ищутся и в seller_attributes."""
+def test_seller_attributes_are_ignored() -> None:
+    """Seller-атрибуты — не вход пайплайна: значение только в них не подтверждается."""
     validator = GroundingValidator()
-    card = ProductCard(seller_attributes={"Память": "128 ГБ"})
-    candidate = _candidate("128 ГБ", evidence="128 ГБ")
-    assert validator.is_grounded(candidate, card) is True
+    card = ProductCard(
+        title="Смартфон Samsung",
+        seller_attributes={"Память": "128 ГБ"},
+    )
+    candidate = _candidate("128 ГБ", code="storage")
+    assert validator.is_grounded(candidate, card) is False
 
 
-def test_seller_attributes_token_fallback() -> None:
-    """Без evidence значения словаря находятся по токенам (repr-пунктуация не мешает)."""
-    validator = GroundingValidator()
-    card = ProductCard(seller_attributes={"Ёмкость аккумулятора": "5000 мА·ч"})
-    candidate = _candidate("5000 мА·ч", code="battery_capacity")
-    assert validator.is_grounded(candidate, card) is True
-
-
-def test_seller_attributes_list_is_searchable() -> None:
-    """Список seller_attributes тоже участвует в поиске."""
+def test_seller_attributes_list_is_ignored() -> None:
+    """Список seller_attributes тоже не участвует в поиске."""
     validator = GroundingValidator()
     card = ProductCard(seller_attributes=["Цвет: синий", "Память: 128 ГБ"])
     candidate = _candidate("128 ГБ", code="storage")
+    assert validator.is_grounded(candidate, card) is False
+
+
+def test_en_color_synonym_is_grounded() -> None:
+    """Английское написание цвета подтверждает канонический русский («Gold» → «золотой»)."""
+    validator = GroundingValidator()
+    card = ProductCard(title="Смартфон realme C33 4/128 GB Gold")
+    candidate = _candidate("золотой", code="color")
+    assert validator.is_grounded(candidate, card) is True
+
+
+def test_en_color_synonym_matches_only_same_color() -> None:
+    """Синоним не подтверждает другой цвет: «Gold» ≠ «черный»."""
+    validator = GroundingValidator()
+    card = ProductCard(title="Смартфон realme C33 Gold")
+    candidate = _candidate("черный", code="color")
+    assert validator.is_grounded(candidate, card) is False
+
+
+def test_digit_letter_glued_unit_is_grounded() -> None:
+    """Слипание цифры и единицы («256GB», «16Гб») не мешает grounding."""
+    validator = GroundingValidator()
+    card = ProductCard(title="Ноутбук HUAWEI MateBook 16Гб")
+    candidate = _candidate("16 ГБ", code="ram")
+    assert validator.is_grounded(candidate, card) is True
+
+    card = ProductCard(title="Смартфон Tecno Camon 40 Pro 8/256GB Black")
+    candidate = _candidate("256 ГБ", code="storage")
     assert validator.is_grounded(candidate, card) is True
 
 

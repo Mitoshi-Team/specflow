@@ -25,6 +25,7 @@ from attribute_extractor.preprocessing import (
     tokenize,
 )
 from specflow_contracts import Attribute, AttributeValueType, CategorySchema, ProductCard
+from specflow_contracts.constants import RAW_TITLE_LABEL
 
 
 def _schema(
@@ -176,7 +177,7 @@ def test_normalize_keeps_service_noise_when_disabled() -> None:
 
 def test_extract_content_values_numbers_with_units() -> None:
     """Число захватывается вместе с известной единицей измерения."""
-    text = "Экран 6.7 дюйма 8/256 ГБ 5000 мА·ч 100% 1,5 м² 12-24 Гц 55\""
+    text = 'Экран 6.7 дюйма 8/256 ГБ 5000 мА·ч 100% 1,5 м² 12-24 Гц 55"'
     assert extract_content_values(text) == [
         "6.7 дюйма",
         "8/256 ГБ",
@@ -215,7 +216,7 @@ def test_extract_content_values_does_not_glue_arbitrary_words() -> None:
         "Смартфон Acme X 8/256 ГБ, чёрный. Экран 6.7 дюйма, батарея 5000 мА·ч",
         "<b>Ламинат</b> 32 класс<br>Толщина 8 мм &amp; 1,5 м²",
         "Смартфон Samsung X. Продавец: ИП Иванов 777. Экран 6.7 дюйма. Подборки.",
-        "Теле\u200bвизор 55\u200e\"\n139 см. Гарантия предоставляется 2 года",
+        'Теле\u200bвизор 55\u200e"\n139 см. Гарантия предоставляется 2 года',
         "Диагональ «6.7» дюйма, 100% заряд, 12-24 Гц",
         "ЗД для отчета BI/BO 2024. Холодильник 350 л",
     ],
@@ -237,12 +238,15 @@ def test_cleaning_invariant_respects_disabled_flags() -> None:
     """Проверка использует те же флаги очистки, что и нормализация."""
     raw = "Экран<br>6.7 дюйма. Подборки"
     normalized = normalize_text(raw, remove_html_tags=False, remove_service_noise=False)
-    assert cleaning_invariant_violations(
-        raw,
-        normalized,
-        remove_html_tags=False,
-        remove_service_noise=False,
-    ) == []
+    assert (
+        cleaning_invariant_violations(
+            raw,
+            normalized,
+            remove_html_tags=False,
+            remove_service_noise=False,
+        )
+        == []
+    )
 
 
 def test_cleaning_invariant_empty_text() -> None:
@@ -326,20 +330,41 @@ def test_generic_schema_shape() -> None:
 
 
 def test_preprocess_builds_raw_text_and_normalizes() -> None:
-    """Препроцессинг собирает raw_text, нормализует и токенизирует текст."""
+    """Препроцессинг собирает размеченный raw_text, нормализует и токенизирует текст."""
     card = ProductCard(title="  Ламинат   32 класс ", description="Толщина\n8 мм")
     result = CardPreprocessor().preprocess(card)
-    assert result.raw_text == "  Ламинат   32 класс  Толщина\n8 мм"
-    assert result.normalized_text == "Ламинат 32 класс Толщина 8 мм"
-    assert result.tokens == ["Ламинат", "32", "класс", "Толщина", "8", "мм"]
+    assert result.raw_text == "Заголовок:   Ламинат   32 класс \nОписание: Толщина\n8 мм"
+    assert result.normalized_text == "Заголовок: Ламинат 32 класс Описание: Толщина 8 мм"
+    assert result.tokens == [
+        "Заголовок:",
+        "Ламинат",
+        "32",
+        "класс",
+        "Описание:",
+        "Толщина",
+        "8",
+        "мм",
+    ]
 
 
-def test_preprocess_includes_seller_attributes_in_raw_text() -> None:
-    """Структурированные поля продавца попадают в raw_text."""
+def test_preprocess_excludes_seller_attributes_from_raw_text() -> None:
+    """Seller-атрибуты — не вход пайплайна: их нет в raw_text и в cleaned-тексте."""
     card = ProductCard(title="Ламинат", seller_attributes={"цвет": "дуб"})
     result = CardPreprocessor().preprocess(card)
-    assert "дуб" in result.raw_text
-    assert "дуб" in result.normalized_text
+    assert result.raw_text == "Заголовок: Ламинат"
+    assert "дуб" not in result.raw_text
+    assert "дуб" not in result.normalized_text
+    assert card.has_text_content() is True
+
+
+def test_preprocess_keeps_section_labels_in_normalized_text() -> None:
+    """Метки секций переживают очистку: заголовок отличим от описания в едином тексте."""
+    card = ProductCard(title="Смартфон Samsung", description="Экран 6.7. Продавец: ИП Иванов")
+    result = CardPreprocessor().preprocess(card)
+    assert "Заголовок:" in result.normalized_text
+    assert "Описание:" in result.normalized_text
+    assert "Samsung" in result.normalized_text
+    assert "Иванов" not in result.normalized_text
 
 
 def test_preprocess_detects_language() -> None:
@@ -409,8 +434,8 @@ def test_preprocessor_respects_remove_junk_flag() -> None:
     card = ProductCard(title="Теле\u200bвизор")
     kept = CardPreprocessor(remove_junk_chars=False).preprocess(card)
     removed = CardPreprocessor().preprocess(card)
-    assert kept.normalized_text == "Теле\u200bвизор"
-    assert removed.normalized_text == "Телевизор"
+    assert kept.normalized_text == f"{RAW_TITLE_LABEL} Теле\u200bвизор"
+    assert removed.normalized_text == f"{RAW_TITLE_LABEL} Телевизор"
 
 
 def test_preprocess_strips_html_from_title_and_description() -> None:
@@ -420,9 +445,23 @@ def test_preprocess_strips_html_from_title_and_description() -> None:
         description="Толщина<br>8 мм &amp; упаковка",
     )
     result = CardPreprocessor().preprocess(card)
-    assert result.raw_text == "<b>Ламинат</b> 32 класс Толщина<br>8 мм &amp; упаковка"
-    assert result.normalized_text == "Ламинат 32 класс Толщина 8 мм & упаковка"
-    assert result.tokens == ["Ламинат", "32", "класс", "Толщина", "8", "мм", "&", "упаковка"]
+    assert (
+        result.raw_text
+        == "Заголовок: <b>Ламинат</b> 32 класс\nОписание: Толщина<br>8 мм &amp; упаковка"
+    )
+    assert result.normalized_text == "Заголовок: Ламинат 32 класс Описание: Толщина 8 мм & упаковка"
+    assert result.tokens == [
+        "Заголовок:",
+        "Ламинат",
+        "32",
+        "класс",
+        "Описание:",
+        "Толщина",
+        "8",
+        "мм",
+        "&",
+        "упаковка",
+    ]
 
 
 def test_preprocessor_respects_remove_html_flag() -> None:
@@ -430,8 +469,8 @@ def test_preprocessor_respects_remove_html_flag() -> None:
     card = ProductCard(title="Экран<br>6.7 дюйма")
     kept = CardPreprocessor(remove_html_tags=False).preprocess(card)
     removed = CardPreprocessor().preprocess(card)
-    assert kept.normalized_text == "Экран<br>6.7 дюйма"
-    assert removed.normalized_text == "Экран 6.7 дюйма"
+    assert kept.normalized_text == "Заголовок: Экран<br>6.7 дюйма"
+    assert removed.normalized_text == "Заголовок: Экран 6.7 дюйма"
 
 
 def test_preprocessor_respects_remove_service_noise_flag() -> None:
@@ -439,6 +478,8 @@ def test_preprocessor_respects_remove_service_noise_flag() -> None:
     card = ProductCard(title="Смартфон Samsung. Продавец: ИП Иванов. Потратить бонусы")
     kept = CardPreprocessor(remove_service_noise=False).preprocess(card)
     removed = CardPreprocessor().preprocess(card)
-    assert kept.normalized_text == "Смартфон Samsung. Продавец: ИП Иванов. Потратить бонусы"
-    assert removed.normalized_text == "Смартфон Samsung."
+    assert (
+        kept.normalized_text == "Заголовок: Смартфон Samsung. Продавец: ИП Иванов. Потратить бонусы"
+    )
+    assert removed.normalized_text == "Заголовок: Смартфон Samsung."
     assert removed.raw_text == card.raw_text

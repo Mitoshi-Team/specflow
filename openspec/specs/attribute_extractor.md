@@ -2,13 +2,13 @@
 
 ## 1. Назначение
 
-Специфицировать ядро пайплайна извлечения характеристик товаров из текста карточки (title, description, seller_attributes). Модуль отвечает за очистку текста, извлечение, нормализацию, валидацию grounding, расчёт уверенности и формирование структурированного результата.
+Специфицировать ядро пайплайна извлечения характеристик товаров из текста карточки (title, description). Модуль отвечает за очистку текста, извлечение, нормализацию, валидацию grounding, расчёт уверенности и формирование структурированного результата.
 
-Пайплайн построен как **целевой гибрид без LLM**: структурированный быстрый путь (атрибуты продавца), детерминированные правила на ядре, NER-трансформер на длинном хвосте и векторное сопоставление характеристик с каталогом полей. Генеративные модели не используются; главный инвариант — «не выдумывать характеристики».
+Пайплайн построен как **целевой гибрид без LLM**: детерминированные правила на ядре, NER-трансформер на длинном хвосте и векторное сопоставление характеристик с каталогом полей. Генеративные модели не используются; главный инвариант — «не выдумывать характеристики». Характеристики, указанные продавцом только в структурированных полях (seller_attributes), не являются входом: вход ограничен заголовком и описанием.
 
 ## 2. Область применения
 
-**Вход:** текст карточки товара (title, description, seller_attributes). **Выход:** JSON со списком выделенных атрибутов, где для каждого указаны `attribute_code`, `normalized_value` (каноническое значение) и `confidence` (уверенность).
+**Вход:** текст карточки товара (title, description). **Выход:** JSON со списком выделенных атрибутов, где для каждого указаны `attribute_code`, `normalized_value` (каноническое значение) и `confidence` (уверенность).
 
 Путь пайплайна:
 
@@ -16,7 +16,7 @@
 карточка
   → Этап 0. Чистка и препроцессинг
   → Этап 1. Резолв схемы категории
-  → Этап 2. Structured-путь (seller_attributes)
+  → Этап 2. (удалён: seller-атрибуты не являются входом пайплайна)
   → Этап 3. Ядро правил (title/description)
   → Этап 4. NER (характеристика + свойство)
   → Этап 5. Резолв поля (векторный матч + блоклист)
@@ -50,12 +50,11 @@ class BaseExtractor(ABC):
         raise NotImplementedError
 ```
 
-**Требования:** каждый экстрактор возвращает список `AttributeCandidate`. Кандидаты из NER несут `ner_score`; кандидаты, чей код поля ещё не известен (structured-ключ, NER-характеристика), разрешаются на Этапе 5.
+**Требования:** каждый экстрактор возвращает список `AttributeCandidate`. Кандидаты из NER несут `ner_score`; кандидаты с незакреплённым кодом поля (NER-характеристика) разрешаются на Этапе 5.
 
-### 3.2 Структурированный путь, правила и NER
+### 3.2 Правила и NER
 
-- **StructuredExtractor (priority 0)** — работает с `seller_attributes`; для каждой пары key→value ключ проходит резолв поля (Этап 5), значение — нормализацию (Этап 6). `extraction_method='structured'`.
-- **RuleExtractor (priority 1)** — регулярные выражения и близость ключевых слов для целевых полей (`brand`, `model`, `diagonal`, `storage`, `ram`, `battery_capacity`, `drive`, `processor`, `color`). Возвращает код поля напрямую. `extraction_method='rule'`.
+- **RuleExtractor (priority 0)** — регулярные выражения и близость ключевых слов для целевых полей (`brand`, `model`, `diagonal`, `storage`, `ram`, `battery_capacity`, `drive`, `processor`, `color`). Возвращает код поля напрямую. `extraction_method='rule'`.
 - **NERExtractor (priority 10)** — multilingual encoder, token-classification с двумя метками `CHARACTERISTIC` и `PROPERTY`; спаны пейрятся в пределах окна. `extraction_method='ner'`, `ner_score` — entity-level вероятность.
 
 ### 3.3 Резолв поля
@@ -79,7 +78,7 @@ class VectorIndex(Protocol):
 
 ### Этап 0. Чистка и препроцессинг
 
-- **Сбор текста:** `raw_text` из `title`, `description`, `seller_attributes`.
+- **Сбор текста:** `raw_text` из `title`, `description` с метками секций («Заголовок:»/«Описание:», метки задаются константами контракта) — бренд и модель почти всегда живут в заголовке, поэтому заголовок отличим от описания в едином тексте.
 - **Очистка (обязательно):** снятие HTML-тегов, удаление служебных вставок и водяных знаков, мусорных/невидимых символов, унификация кавычек, тире и переносов, сжатие пробелов. Обоснование: 49,3% описаний с HTML и служебный шум (EDA).
 - **Язык:** автоопределение (ru/en/mixed) — для словарей и нормализаторов; при наличии `card.language` используется он.
 - **Токенизация:** whitespace — для правил, токенизатор модели — для NER.
@@ -89,10 +88,9 @@ class VectorIndex(Protocol):
 
 - Загрузка `CategorySchema` по `category_id`/`category_name`; fallback — generic-схема. Обязательные атрибуты схемы управляют rules-fallback (Этап 7).
 
-### Этап 2. Structured-путь (seller_attributes)
+### Этап 2. Удалён (seller-атрибуты не являются входом)
 
-- Для каждой пары key→value: ключ → резолв поля (Этап 5), значение → нормализация (Этап 6).
-- `extraction_method='structured'`. Это быстрый и точный путь: поле уже отделено продавцом.
+Этап убран решением команды: характеристики извлекаются только из заголовка и описания; seller-атрибуты остаются в контракте `ProductCard` для обратной совместимости, но пайплайном не используются. Нумерация этапов сохранена ради стабильности ссылок (Этапы 3–11).
 
 ### Этап 3. Ядро правил (title/description)
 
@@ -107,11 +105,11 @@ class VectorIndex(Protocol):
 - Пейринг `PROPERTY` ↔ ближайшая `CHARACTERISTIC` в пределах окна (предложение/контекст).
 - `ner_score` — entity-level вероятность для извлечённой сущности.
 - Характеристика разрешается в код поля на Этапе 5; `extraction_method='ner'`.
-- NER применяется к свободному тексту; структурированный путь (Этап 2) NER не дублирует.
+- NER применяется к свободному тексту (title/description); правила и NER не дублируют друг друга без явной причины.
 
 ### Этап 5. Резолв поля (векторный матч + блоклист)
 
-- Для кандидатов без кода поля (structured-ключи, NER-характеристики): `match_score` = близость характеристики к ближайшему полю `FieldCatalog` через `VectorIndex`.
+- Для кандидатов без кода поля (NER-характеристики): `match_score` = близость характеристики к ближайшему полю `FieldCatalog` через `VectorIndex`.
 - `match_score >= MATCH_THRESHOLD` → существующий `attribute_code`; `match_score` сохраняется в кандидате для трассировки.
 - `match_score < MATCH_THRESHOLD`:
   - характеристика в `FieldBlocklist` → кандидат отбрасывается (шум);
@@ -129,7 +127,7 @@ class VectorIndex(Protocol):
 
 ### Этап 7. Rules-fallback (незакрытые обязательные поля)
 
-- Детерминированные правила выполняются как fallback: заполняют **только** те обязательные поля схемы, которые не закрыли structured/NER-пути.
+- Детерминированные правила выполняются как fallback: заполняют **только** те обязательные поля схемы, которые не закрыли NER-путь.
 - `extraction_method='rule'`, `confidence=DETERMINISTIC_CONFIDENCE`.
 
 ### Этап 8. Мёржа и дедупликация
@@ -142,13 +140,13 @@ class VectorIndex(Protocol):
 ### Этап 9. Grounding (обязательный фильтр)
 
 - **Hard constraint:** для всех финальных кандидатов `is_confirmed_in_text == true`.
-- Проверка: `evidence_text`/ключевые токены присутствуют в `title`/`description`/`seller_attributes` очищенной карточки (case-insensitive, нормализация пробелов, числовое/единичное совпадение `6,7` vs `6.7`, `ГБ` vs `GB`).
+- Проверка: `evidence_text`/ключевые токены присутствуют в `title`/`description` очищенной карточки (case-insensitive, нормализация пробелов, числовое/единичное совпадение `6,7` vs `6.7`, `ГБ` vs `GB`, `128GB` vs `128 ГБ`) и синонимия цветов (`Black` подтверждает канон «черный»). Кандидаты, существующие только в seller-атрибутах и отсутствующие в тексте, не подтверждаются.
 - Кандидаты без подтверждения **отбрасываются**. Сохраняется минимум один `source_spans`.
 
 ### Этап 10. Уверенность, пороги, статус
 
 - **Уверенность:**
-  - `structured`/`rule` → `DETERMINISTIC_CONFIDENCE` (константа, по умолчанию 0.9);
+  - `rule` → `DETERMINISTIC_CONFIDENCE` (константа, по умолчанию 0.9);
   - `ner` → `ner_score`;
   - `match_score` — только трассировка, в `confidence` не входит.
 - **Пороги:** `AUTO_THRESHOLD = 0.80`, `REVIEW_THRESHOLD = 0.60`.
@@ -183,8 +181,8 @@ class VectorIndex(Protocol):
 | Короткое упоминание («6.7» без «дюйм») | Требуется контекст; если правило/NER однозначно определяет поле — допустимо с пониженной уверенностью, иначе не включать. | `low_confidence` или отбрасывается |
 | Синонимы/аббревиатуры («ОЗУ 8ГБ», «RAM 8GB») | Нормализация через синонимы и unit-rules. | `ok` |
 | Англо-русский микс | Регистронезависимый поиск, двусторонние маппинги, словари брендов/enum. | `ok` |
-| NER-модель не загружена | Fallback на structured/rules; предупреждение, продолжение работы. | `ok`/`partial` |
-| Векторный индекс недоступен | Structured/NER-характеристики без матча: при недоступности — fallback на правила и точное совпадение по имени поля. | `partial` |
+| NER-модель не загружена | Fallback на правила; предупреждение, продолжение работы. | `ok`/`partial` |
+| Векторный индекс недоступен | NER-характеристики без матча: при недоступности — fallback на правила и точное совпадение по имени поля. | `partial` |
 | Множественные кандидаты от разных путей | Мёржа по `attribute_code`, выбор max confidence. | `ok` |
 
 ## 7. Тестирование модуля
@@ -192,7 +190,6 @@ class VectorIndex(Protocol):
 ### 7.1 Unit-тесты
 
 - Cleaner: снятие HTML, удаление служебных вставок/водяных знаков, мусорных символов, нормализация кавычек/тире/пробелов.
-- StructuredExtractor: key→value, резолв поля по ключу, нормализация значения.
 - RuleExtractor: парсинг единиц, шаблоны, boundary-aware, форматы чисел.
 - NERExtractor: две метки, пейринг `PROPERTY`↔`CHARACTERISTIC`, `ner_score`, маппинг в код.
 - FieldResolver/VectorIndex: матч по порогу, ниже порога → новое поле, блоклист отбрасывает шум.
@@ -203,7 +200,7 @@ class VectorIndex(Protocol):
 
 ### 7.2 Integration-тесты
 
-- Полный путь: clean → structured → rules → NER → field resolution → normalize → fallback → merge → grounding → confidence.
+- Полный путь: clean → rules → NER → field resolution → normalize → fallback → merge → grounding → confidence.
 - Rules-fallback закрывает только оставшиеся обязательные поля.
 - Авто-добавление поля ниже порога и отбрасывание мусора по блоклисту.
 - Graceful degradation: NER-модель/векторный индекс недоступны → fallback без падения.
@@ -215,7 +212,7 @@ class VectorIndex(Protocol):
 - Соответствие `AttributePrediction`/`ExtractionResponseItem` (api_contract.md).
 - Обязательные поля: `attribute_code`, `normalized_value`, `confidence`, `extraction_method`, `is_confirmed_in_text`.
 - `confidence` ∈ [0.0,1.0]; `is_confirmed_in_text == true` во всех финальных атрибутах.
-- `extraction_method ∈ {structured, rule, ner}`.
+- `extraction_method ∈ {rule, ner}` в финальных атрибутах (значений `structured` не возникает).
 
 ### 7.4 Приёмочные тест-кейсы
 
@@ -257,7 +254,7 @@ class VectorIndex(Protocol):
 ### 9.2 Метрики (runtime)
 
 - `extract_requests_total{method="single|batch"}`
-- `extract_duration_ms{stage="clean|structured|rules|ner|resolve|normalize|fallback|merge|grounding|total"}`
+- `extract_duration_ms{stage="clean|rules|ner|resolve|normalize|fallback|merge|grounding|total"}`
 - `candidates_total{method,attribute_code}`
 - `vector_match_total{outcome="existing|new|blocked"}`
 - `new_fields_total{attribute_code}`
@@ -285,10 +282,10 @@ class VectorIndex(Protocol):
 ## 10. Принципы реализации
 
 - **Чистка — первый этап:** любой входящий текст очищается до извлечения.
-- **Целевой гибрид:** структура (`seller_attributes`) → правила (ядро) → NER (хвост) → векторный матч (канон полей) → нормализация → rules-fallback.
+- **Целевой гибрид:** правила (ядро) → NER (хвост) → векторный матч (канон полей) → нормализация → rules-fallback.
 - **Grounding как инвариант:** никогда не выпускать кандидата с `is_confirmed_in_text == false`.
-- **Determinism:** structured/rules детерминированы; для NER фиксируются версия модели и параметры.
-- **Простая уверенность:** `structured`/`rule` → константа, `ner` → `ner_score`; никаких весов методов, штрафов и взвешенной агрегации.
+- **Determinism:** rules детерминированы; для NER фиксируются версия модели и параметры.
+- **Простая уверенность:** `rule` → константа, `ner` → `ner_score`; никаких весов методов, штрафов и взвешенной агрегации.
 - **Fail-safe:** graceful degradation, partial results в батче, ошибки элемента не валят батч.
 - **Traceable:** каждый финальный атрибут несёт `extraction_method`, `confidence`, `source_spans`, `evidence_text`.
 - **Тестируемо:** чистые интерфейсы, DI, конфиг через `Pydantic Settings`.

@@ -10,7 +10,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
 
-from specflow_contracts.constants import MAX_CONFIDENCE, MIN_CONFIDENCE
+from specflow_contracts.constants import (
+    MAX_CONFIDENCE,
+    MIN_CONFIDENCE,
+    RAW_DESCRIPTION_LABEL,
+    RAW_TITLE_LABEL,
+)
 from specflow_contracts.enums import (
     AttributeValueType,
     ExtractionMethod,
@@ -50,11 +55,19 @@ class ProductCard(BaseModel):
     @computed_field
     @property
     def raw_text(self) -> str:
-        """Конкатенированный текст карточки для анализа."""
-        parts = [part for part in (self.title, self.description) if part]
-        if self.seller_attributes:
-            parts.append(str(self.seller_attributes))
-        return " ".join(parts)
+        """Конкатенированный текст карточки для анализа с метками секций.
+
+        Секции «Заголовок:»/«Описание:» идут с новой строки: бренд и модель
+        почти всегда живут в заголовке, поэтому правила и NER должны уметь
+        отличать его от описания. Seller-атрибуты в ``raw_text`` не входят —
+        вход пайплайна ограничен текстовыми полями (title/description).
+        """
+        parts: list[str] = []
+        if self.title:
+            parts.append(f"{RAW_TITLE_LABEL} {self.title}")
+        if self.description:
+            parts.append(f"{RAW_DESCRIPTION_LABEL} {self.description}")
+        return "\n".join(parts)
 
 
 class Attribute(BaseModel):

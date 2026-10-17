@@ -71,17 +71,11 @@ DEFAULT_ENUM_STRICT = False
 # Меньшее значение priority — экстрактор запускается раньше (cheap-first).
 # Имена совпадают со значениями ``ExtractionMethod``.
 
-STRUCTURED_EXTRACTOR_NAME = ExtractionMethod.STRUCTURED.value
-"""Имя структурного экстрактора."""
-
-STRUCTURED_EXTRACTOR_PRIORITY = 0
-"""Приоритет структурного экстрактора."""
-
 RULE_EXTRACTOR_NAME = ExtractionMethod.RULE.value
 """Имя экстрактора на правилах."""
 
-RULE_EXTRACTOR_PRIORITY = 1
-"""Приоритет экстрактора на правилах."""
+RULE_EXTRACTOR_PRIORITY = 0
+"""Приоритет экстрактора на правилах (первый: дёшево и детерминированно)."""
 
 NER_EXTRACTOR_NAME = ExtractionMethod.NER.value
 """Имя NER-экстрактора."""
@@ -211,7 +205,7 @@ GENERIC_SCHEMA_VERSION = "1.0.0"
 CONFLICT_FEATURE_KEY = "conflict"
 """Ключ признака в ``AttributeCandidate.features``, отмечающий конфликт значений."""
 
-# --- Grounding Validation (Этап 5) -------------------------------------------
+# --- Grounding Validation (Этап 9) -------------------------------------------
 
 DECIMAL_COMMA_PATTERN = r"(?<=\d),(?=\d)"
 """Десятичная запятая между цифрами (сопоставление ``6,7`` и ``6.7``)."""
@@ -224,6 +218,12 @@ NUMBER_WORD_HYPHEN_PATTERN = r"(?<=\d)-(?=[^\W\d_])"
 
 TOKEN_SEPARATOR_PATTERN = r"[/\\,;_]"
 """Разделители внутри слипшихся токенов (``i7-13620H/16Гб``, ``серый,``)."""
+
+DOT_SEPARATOR_PATTERN = r"(?<![0-9])\.|\.(?![0-9])"
+"""Несистемные точки — разделители (``50 in.``), десятичные ``6.7`` не трогаем."""
+
+DIGIT_LETTER_PATTERN = r"(?<=\d)(?=[^\W\d_])"
+"""Граница «цифра → буква»: разлипает ``128GB`` → ``128 gb``, ``16Гб`` → ``16 гб``."""
 
 GROUNDING_UNIT_ALIASES = {
     "гб": "gb",
@@ -252,6 +252,30 @@ GROUNDING_UNIT_ALIASES = {
     "inch": "in",
 }
 """Синонимы единиц измерения для сопоставления при grounding (ГБ ↔ GB и т.п.)."""
+
+COLOR_SYNONYMS = {
+    "черный": ("black",),
+    "белый": ("white",),
+    "серый": ("gray", "grey"),
+    "серебристый": ("silver",),
+    "золотой": ("gold",),
+    "синий": ("blue",),
+    "голубой": ("blue", "cyan"),
+    "зеленый": ("green",),
+    "красный": ("red",),
+    "розовый": ("pink",),
+    "фиолетовый": ("purple", "violet"),
+    "оранжевый": ("orange",),
+    "желтый": ("yellow",),
+    "коричневый": ("brown",),
+    "титан": ("titanium",),
+}
+"""EN-синонимы канонических цветов для grounding (``Black`` подтверждает «черный»).
+
+Ключи — канонические значения (строчные, ё→е); значения — варианты написания
+цвета в тексте карточки, чаще всего в заголовке. Продавцы пишут цвет и по-русски,
+и по-английски («Galaxy S25 Titanium Gray»), канон же русскоязычный.
+"""
 
 # --- Нормализация значений (Этап 6) ------------------------------------------
 
@@ -328,7 +352,7 @@ DEFAULT_MATCH_THRESHOLD = 0.75
 """Порог близости при векторном матче поля (match_score >= threshold)."""
 
 DEFAULT_DETERMINISTIC_CONFIDENCE = 0.90
-"""Детерминированная уверенность для structured/rule кандидатов."""
+"""Детерминированная уверенность для rule-кандидатов."""
 
 AUTO_THRESHOLD = DEFAULT_CONFIDENCE_THRESHOLD
 """Порог автоматического принятия (needs_review=False)."""

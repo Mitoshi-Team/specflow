@@ -6,7 +6,7 @@
 
 Стек: Python + FastAPI. Формат — JSON. Все эндпоинты валидируются через Pydantic.
 
-**Основной контракт (вход → выход):** на вход подаётся текст карточки товара (название, описание, атрибуты продавца), на выход возвращается JSON с выделенными атрибутами — для каждого атрибута `attribute_code`, `normalized_value` (каноническое значение) и `confidence` (уверенность). Основной эндпоинт: `POST /api/v1/extract`.
+**Основной контракт (вход → выход):** на вход подаётся текст карточки товара (название, описание; seller-атрибуты принимаются контрактом для совместимости, но пайплайном не используются — служат разметкой), на выход возвращается JSON с выделенными атрибутами — для каждого атрибута `attribute_code`, `normalized_value` (каноническое значение) и `confidence` (уверенность). Основной эндпоинт: `POST /api/v1/extract`.
 
 ## 2. Общие принципы
 
@@ -36,7 +36,7 @@
 }
 ```
 
-**Правило валидации:** хотя бы одно из полей (`title`, `description`, `seller_attributes`) должно быть непустым.
+**Правило валидации:** хотя бы одно из полей (`title`, `description`, `seller_attributes`) должно быть непустым. Пайплайн извлечения использует только `title` и `description`; `seller_attributes` принимаются и игнорируются (источник разметки для обучения/оценки).
 
 ### 3.2 AttributePrediction
 
@@ -50,7 +50,7 @@
   "source_spans": [
     {"field": "title|description|seller_attributes", "text": "string", "start": 0, "end": 10}
   ],
-  "extraction_method": "structured|rule|ner",
+  "extraction_method": "rule|ner",
   "is_confirmed_in_text": true,
   "ner_score": 0.0,
   "match_score": 0.0,
@@ -125,7 +125,7 @@
   "version": "string",
   "pipeline_version": "string",
   "uptime_seconds": 123,
-  "models_loaded": ["structured", "rules", "ner", "vector_index"],
+  "models_loaded": ["rules", "ner", "vector_index"],
   "cache_enabled": true
 }
 ```
@@ -173,7 +173,7 @@
   "service_name": "attribute-extractor",
   "version": "1.0.0",
   "pipeline_version": "1.0.0",
-  "extraction_methods": ["structured","rule","ner"],
+  "extraction_methods": ["rule","ner"],
   "default_threshold": 0.80,
   "supports_batch": true,
   "max_batch_size": 50,

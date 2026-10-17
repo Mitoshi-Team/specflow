@@ -25,9 +25,9 @@ def test_product_card_raw_text_collects_present_fields() -> None:
     )
 
     raw_text = card.raw_text
+    assert raw_text == "Заголовок: Смартфон Samsung\nОписание: Экран 6.7 дюйма"
     assert "Смартфон Samsung" in raw_text
     assert "Экран 6.7 дюйма" in raw_text
-    assert "чёрный" in raw_text
 
 
 def test_product_card_raw_text_skips_empty_fields() -> None:
@@ -37,11 +37,27 @@ def test_product_card_raw_text_skips_empty_fields() -> None:
     assert card.has_text_content() is False
 
 
+def test_product_card_raw_text_excludes_seller_attributes() -> None:
+    """Seller-атрибуты — не вход пайплайна: в raw_text их нет и repr не просачивается."""
+    card = ProductCard(seller_attributes={"color": "чёрный", "ram": "8 ГБ"})
+
+    assert card.raw_text == ""
+    assert card.has_text_content() is True
+
+    card = ProductCard(
+        title="Смартфон Samsung",
+        seller_attributes={"color": "чёрный", "ram": "8 ГБ"},
+    )
+    assert card.raw_text == "Заголовок: Смартфон Samsung"
+    assert "{" not in card.raw_text
+    assert "'" not in card.raw_text
+
+
 def test_product_card_accepts_list_seller_attributes() -> None:
     card = ProductCard(seller_attributes=[{"code": "color", "value": "чёрный"}])
 
     assert card.has_text_content() is True
-    assert "color" in card.raw_text
+    assert card.raw_text == ""
 
 
 def test_product_card_has_text_content_ignores_blank_title() -> None:

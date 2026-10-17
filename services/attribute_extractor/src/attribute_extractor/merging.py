@@ -51,6 +51,9 @@ class CandidateMerger:
             is_confirmed_in_text=is_confirmed,
             source_spans=CandidateMerger._merge_spans(candidates),
             evidence_text=best.evidence_text,
+            ner_score=best.ner_score,
+            match_score=best.match_score,
+            is_new_field=best.is_new_field,
             features=features or None,
         )
 

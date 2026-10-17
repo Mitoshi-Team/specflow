@@ -71,7 +71,7 @@ DEFAULT_ENUM_STRICT = False
 # Меньшее значение priority — экстрактор запускается раньше (cheap-first).
 # Имена совпадают со значениями ``ExtractionMethod``.
 
-STRUCTURED_EXTRACTOR_NAME = "structured"
+STRUCTURED_EXTRACTOR_NAME = ExtractionMethod.STRUCTURED.value
 """Имя структурного экстрактора."""
 
 STRUCTURED_EXTRACTOR_PRIORITY = 0

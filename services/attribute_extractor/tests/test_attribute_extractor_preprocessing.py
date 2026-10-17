@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from attribute_extractor import preprocessing
 from attribute_extractor.constants import (
     GENERIC_CATEGORY,
     GENERIC_SCHEMA_VERSION,
@@ -15,7 +16,9 @@ from attribute_extractor.constants import (
 from attribute_extractor.preprocessing import (
     CardPreprocessor,
     SchemaRegistry,
+    cleaning_invariant_violations,
     detect_language,
+    extract_content_values,
     generic_schema,
     normalize_text,
     strip_service_noise,
@@ -169,6 +172,127 @@ def test_normalize_keeps_service_noise_when_disabled() -> None:
     assert normalize_text(raw, remove_service_noise=False) == (
         "Смартфон Samsung. Потратить бонусы."
     )
+
+
+def test_extract_content_values_numbers_with_units() -> None:
+    """Число захватывается вместе с известной единицей измерения."""
+    text = "Экран 6.7 дюйма 8/256 ГБ 5000 мА·ч 100% 1,5 м² 12-24 Гц 55\""
+    assert extract_content_values(text) == [
+        "6.7 дюйма",
+        "8/256 ГБ",
+        "5000 мА·ч",
+        "100%",
+        "1,5 м²",
+        "12-24 Гц",
+        '55"',
+    ]
+
+
+def test_extract_content_values_comma_decimal() -> None:
+    """Десятичная запятая не разрывает число."""
+    assert extract_content_values("Диагональ 6,7 дюйма") == ["6,7 дюйма"]
+
+
+def test_extract_content_values_without_numbers() -> None:
+    """Текст без чисел не даёт значений."""
+    assert extract_content_values("Просто текст без чисел") == []
+    assert extract_content_values("") == []
+
+
+def test_extract_content_values_does_not_glue_arbitrary_words() -> None:
+    """Слово после числа не захватывается, если это не единица измерения.
+
+    Иначе служебная вставка сразу после числа («6.7 Подборки») склеивалась
+    бы со значением и ломала сравнение до/после очистки.
+    """
+    assert extract_content_values("6.7 Подборки") == ["6.7"]
+    assert extract_content_values("32 класс") == ["32"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "Смартфон Acme X 8/256 ГБ, чёрный. Экран 6.7 дюйма, батарея 5000 мА·ч",
+        "<b>Ламинат</b> 32 класс<br>Толщина 8 мм &amp; 1,5 м²",
+        "Смартфон Samsung X. Продавец: ИП Иванов 777. Экран 6.7 дюйма. Подборки.",
+        "Теле\u200bвизор 55\u200e\"\n139 см. Гарантия предоставляется 2 года",
+        "Диагональ «6.7» дюйма, 100% заряд, 12-24 Гц",
+        "ЗД для отчета BI/BO 2024. Холодильник 350 л",
+    ],
+)
+def test_cleaning_invariant_holds_for_realistic_text(raw: str) -> None:
+    """Очистка (HTML, мусор, шум, кавычки) не меняет числа и единицы."""
+    assert cleaning_invariant_violations(raw, normalize_text(raw)) == []
+
+
+def test_cleaning_invariant_exempts_values_inside_removed_noise() -> None:
+    """Цифры в полностью удалённом служебном предложении — не нарушение."""
+    raw = "Акция 5000! Продавец: ИП Иванов 777. Экран 6.7 дюйма"
+    normalized = normalize_text(raw)
+    assert "777" not in normalized
+    assert cleaning_invariant_violations(raw, normalized) == []
+
+
+def test_cleaning_invariant_respects_disabled_flags() -> None:
+    """Проверка использует те же флаги очистки, что и нормализация."""
+    raw = "Экран<br>6.7 дюйма. Подборки"
+    normalized = normalize_text(raw, remove_html_tags=False, remove_service_noise=False)
+    assert cleaning_invariant_violations(
+        raw,
+        normalized,
+        remove_html_tags=False,
+        remove_service_noise=False,
+    ) == []
+
+
+def test_cleaning_invariant_empty_text() -> None:
+    """Пустой вход не даёт нарушений."""
+    assert cleaning_invariant_violations("", "") == []
+
+
+def test_cleaning_invariant_detects_changed_value() -> None:
+    """Изменение числа при очистке — нарушение в обе стороны."""
+    violations = cleaning_invariant_violations("Экран 6.7 дюйма", "Экран 6.8 дюйма")
+    assert any("появилось или изменилось" in item and "6.8 дюйма" in item for item in violations)
+    assert any("потеряно" in item and "6.7 дюйма" in item for item in violations)
+
+
+def test_cleaning_invariant_detects_lost_value() -> None:
+    """Потеря значения при очистке — нарушение."""
+    violations = cleaning_invariant_violations("Экран 6.7 дюйма", "Экран дюйма")
+    assert violations == ["значение потеряно при очистке: '6.7 дюйма'"]
+
+
+def test_cleaning_invariant_detects_invented_value() -> None:
+    """Появление значения, отсутствующего в исходном тексте, — нарушение."""
+    violations = cleaning_invariant_violations("Экран дюйма", "Экран 6.7 дюйма")
+    assert violations == ["значение появилось или изменилось при очистке: '6.7 дюйма'"]
+
+
+def test_preprocess_preserves_content_values() -> None:
+    """Препроцессинг карточки сохраняет содержательные значения (инвариант спеки)."""
+    card = ProductCard(
+        title="<b>Смартфон</b> 8/256 ГБ",
+        description="Экран 6.7 дюйма<br>батарея 5000 мА·ч. Продавец: ИП Иванов 777. Подборки.",
+    )
+    result = CardPreprocessor().preprocess(card)
+    values = extract_content_values(result.normalized_text)
+    assert "8/256 ГБ" in values
+    assert "6.7 дюйма" in values
+    assert "5000 мА·ч" in values
+    assert cleaning_invariant_violations(result.raw_text, result.normalized_text) == []
+
+
+def test_preprocess_raises_on_cleaning_invariant_violation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Препроцессинг падает, если очистка нарушила инвариант значений."""
+    monkeypatch.setattr(
+        preprocessing,
+        "cleaning_invariant_violations",
+        lambda *args, **kwargs: ["значение потеряно при очистке: '6.7'"],
+    )
+    card = ProductCard(title="Экран 6.7 дюйма")
+    with pytest.raises(ValueError, match="инвариант очистки"):
+        CardPreprocessor().preprocess(card)
 
 
 @pytest.mark.parametrize(

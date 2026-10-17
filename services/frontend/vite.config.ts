@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 // Порт dev-сервера внутри контейнера и внешний порт, на котором nginx
 // принимает HMR-соединения (см. nginx/nginx.conf и docker-compose.yml).
 const serverPort = Number(process.env.VITE_PORT ?? 5173);
-const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT ?? 80);
+const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT ?? 8000);
 
 export default defineConfig({
   plugins: [react()],

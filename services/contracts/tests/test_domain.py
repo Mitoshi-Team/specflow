@@ -82,13 +82,74 @@ def test_attribute_candidate_accepts_boundary_confidence() -> None:
         raw_value="samsung",
         normalized_value="Samsung",
         confidence=1.0,
-        extraction_method=ExtractionMethod.DICT,
+        extraction_method=ExtractionMethod.STRUCTURED,
         is_confirmed_in_text=True,
         source_spans=[Span(field=SpanField.TITLE, text="Samsung")],
     )
 
     assert candidate.confidence == 1.0
     assert candidate.source_spans[0].field == SpanField.TITLE
+
+
+def test_attribute_candidate_tracing_fields_default_to_empty() -> None:
+    candidate = AttributeCandidate(
+        attribute_code="brand",
+        raw_value="Samsung",
+        normalized_value="Samsung",
+        confidence=0.9,
+        extraction_method=ExtractionMethod.RULE,
+        is_confirmed_in_text=True,
+    )
+
+    assert candidate.ner_score is None
+    assert candidate.match_score is None
+    assert candidate.is_new_field is False
+
+
+def test_attribute_candidate_accepts_tracing_fields() -> None:
+    candidate = AttributeCandidate(
+        attribute_code="color",
+        raw_value="красный",
+        normalized_value="красный",
+        confidence=0.95,
+        extraction_method=ExtractionMethod.NER,
+        is_confirmed_in_text=True,
+        ner_score=0.95,
+        match_score=0.78,
+        is_new_field=True,
+    )
+
+    assert candidate.ner_score == 0.95
+    assert candidate.match_score == 0.78
+    assert candidate.is_new_field is True
+
+
+@pytest.mark.parametrize("score", [-0.01, 1.01])
+def test_attribute_candidate_rejects_ner_score_out_of_range(score: float) -> None:
+    with pytest.raises(ValidationError):
+        AttributeCandidate(
+            attribute_code="color",
+            raw_value="красный",
+            normalized_value="красный",
+            confidence=0.95,
+            extraction_method=ExtractionMethod.NER,
+            is_confirmed_in_text=True,
+            ner_score=score,
+        )
+
+
+@pytest.mark.parametrize("score", [-0.01, 1.01])
+def test_attribute_candidate_rejects_match_score_out_of_range(score: float) -> None:
+    with pytest.raises(ValidationError):
+        AttributeCandidate(
+            attribute_code="color",
+            raw_value="красный",
+            normalized_value="красный",
+            confidence=0.95,
+            extraction_method=ExtractionMethod.STRUCTURED,
+            is_confirmed_in_text=True,
+            match_score=score,
+        )
 
 
 def test_extraction_result_serializes_enums_as_values() -> None:

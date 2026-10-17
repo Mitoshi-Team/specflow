@@ -14,13 +14,9 @@ class SpanField(StrEnum):
 class ExtractionMethod(StrEnum):
     """Метод, которым получен кандидат значения атрибута."""
 
+    STRUCTURED = "structured"
     RULE = "rule"
-    DICT = "dict"
     NER = "ner"
-    CLASSIFIER = "classifier"
-    ML_TRANSFORMER = "ml_transformer"
-    LLM = "llm"
-    HYBRID = "hybrid"
 
 
 class ExtractionStatus(StrEnum):

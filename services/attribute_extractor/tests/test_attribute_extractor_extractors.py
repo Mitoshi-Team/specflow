@@ -5,28 +5,16 @@ from __future__ import annotations
 import pytest
 
 from attribute_extractor.constants import (
-    CLASSIFIER_EXTRACTOR_NAME,
-    CLASSIFIER_EXTRACTOR_PRIORITY,
-    DICT_EXTRACTOR_NAME,
-    DICT_EXTRACTOR_PRIORITY,
-    LLM_EXTRACTOR_NAME,
-    LLM_EXTRACTOR_PRIORITY,
     NER_EXTRACTOR_NAME,
     NER_EXTRACTOR_PRIORITY,
     RULE_EXTRACTOR_NAME,
     RULE_EXTRACTOR_PRIORITY,
-    TRANSFORMER_EXTRACTOR_NAME,
-    TRANSFORMER_EXTRACTOR_PRIORITY,
 )
 from attribute_extractor.extractors import (
     BaseExtractor,
-    ClassifierExtractor,
-    DictExtractor,
     ExtractorRegistry,
-    LLMExtractor,
     NERExtractor,
     RuleExtractor,
-    TransformerExtractor,
     build_default_registry,
 )
 from specflow_contracts import CategorySchema, ProductCard
@@ -65,11 +53,7 @@ def test_base_extractor_is_abstract() -> None:
     "extractor_cls",
     [
         RuleExtractor,
-        DictExtractor,
         NERExtractor,
-        ClassifierExtractor,
-        TransformerExtractor,
-        LLMExtractor,
     ],
 )
 def test_skeleton_extractors_return_empty(extractor_cls) -> None:
@@ -92,20 +76,12 @@ def test_default_registry_order_and_names() -> None:
     names = [e.name for e in registry]
     assert names == [
         RULE_EXTRACTOR_NAME,
-        DICT_EXTRACTOR_NAME,
         NER_EXTRACTOR_NAME,
-        CLASSIFIER_EXTRACTOR_NAME,
-        TRANSFORMER_EXTRACTOR_NAME,
-        LLM_EXTRACTOR_NAME,
     ]
     priorities = [e.priority for e in registry]
     assert priorities == [
         RULE_EXTRACTOR_PRIORITY,
-        DICT_EXTRACTOR_PRIORITY,
         NER_EXTRACTOR_PRIORITY,
-        CLASSIFIER_EXTRACTOR_PRIORITY,
-        TRANSFORMER_EXTRACTOR_PRIORITY,
-        LLM_EXTRACTOR_PRIORITY,
     ]
 
 

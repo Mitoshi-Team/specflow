@@ -1,8 +1,8 @@
 """Константы сервиса извлечения атрибутов.
 
 Здесь собраны значения по умолчанию для настроек и доменные константы
-пайплайна (пороги, веса методов, штрафы, лимиты, таймауты, версии), чтобы
-не хранить их в бизнес-логике и не дублировать между модулями.
+пайплайна (пороги, лимиты, версии), чтобы не хранить их в бизнес-логике и
+не дублировать между модулями.
 """
 
 from specflow_contracts import ExtractionMethod
@@ -32,10 +32,7 @@ DEFAULT_VOCAB_VERSION = "0.1.0"
 DEFAULT_NER_MODEL_VERSION = ""
 """Версия NER-модели (пусто — модель не подключена)."""
 
-DEFAULT_TRANSFORMER_MODEL_VERSION = ""
-"""Версия transformer-модели (пусто — модель не подключена)."""
-
-# --- Пороги уверенности и штрафы -------------------------------------------
+# --- Пороги уверенности -----------------------------------------------------
 
 MIN_CONFIDENCE = 0.0
 """Нижняя граница шкалы уверенности."""
@@ -45,30 +42,8 @@ MAX_CONFIDENCE = 1.0
 
 DEFAULT_CONFIDENCE_THRESHOLD = 0.80
 """Порог уверенности, начиная с которого значение считается надёжным."""
-
 REVIEW_CONFIDENCE_THRESHOLD = 0.60
 """Порог уверенности, ниже которого значение требует ручной проверки."""
-
-ENUM_OUT_OF_VOCAB_PENALTY = 0.15
-"""Штраф к уверенности, если enum-значение не сопоставлено со справочником."""
-
-CONFLICTING_VALUES_PENALTY = 0.10
-"""Штраф при конфликте разных значений одного атрибута."""
-
-WEAK_EVIDENCE_PENALTY = 0.05
-"""Штраф при слабом подтверждении значения в исходном тексте."""
-
-# --- Веса методов агрегации -------------------------------------------------
-
-DEFAULT_METHOD_WEIGHTS = {
-    "rule": 1.00,
-    "dict": 0.98,
-    "ner": 0.90,
-    "classifier": 0.90,
-    "ml_transformer": 0.92,
-    "llm": 0.85,
-}
-"""Веса методов при взвешенной агрегации уверенности (конфигурируемы)."""
 
 # --- Пакетная обработка -----------------------------------------------------
 
@@ -78,10 +53,7 @@ MIN_BATCH_SIZE = 1
 DEFAULT_MAX_BATCH_SIZE = 50
 """Максимальное число карточек в одном пакетном запросе."""
 
-# --- Гибридный пайплайн и обязательные проверки ----------------------------
-
-DEFAULT_HYBRID_STRATEGY = "cascade_cheap_first"
-"""Стратегия гибридного каскада: дешёвые методы выполняются первыми."""
+# --- Обязательные проверки и нормализация -----------------------------------
 
 DEFAULT_GROUNDING_REQUIRED = True
 """Обязательная проверка подтверждения значения в исходном тексте."""
@@ -95,65 +67,27 @@ DEFAULT_UNIT_CONVERSION_ENABLED = True
 DEFAULT_ENUM_STRICT = False
 """Строгая проверка enum-значений по справочнику (отбрасывать значения вне словаря)."""
 
-# --- Внешняя LLM ------------------------------------------------------------
-
-DEFAULT_ENABLE_LLM = False
-"""Флаг подключения внешней LLM (базовый режим работает без неё)."""
-
-DEFAULT_LLM_PROVIDER = "openrouter"
-"""Провайдер внешней LLM по умолчанию."""
-
-DEFAULT_LLM_MODEL = ""
-"""Идентификатор модели LLM (пусто — модель не задана)."""
-
-DEFAULT_LLM_TEMPERATURE = 0.0
-"""Температура генерации LLM: нулевая для воспроизводимости."""
-
-DEFAULT_LLM_MAX_TOKENS = 1200
-"""Ограничение длины ответа LLM в токенах."""
-
-DEFAULT_LLM_TIMEOUT_SECONDS = 30.0
-"""Таймаут запроса к внешней LLM, в секундах."""
-
 # --- Экстракторы (имена и приоритеты каскада) ------------------------------
 # Меньшее значение priority — экстрактор запускается раньше (cheap-first).
 # Имена совпадают со значениями ``ExtractionMethod``.
 
+STRUCTURED_EXTRACTOR_NAME = "structured"
+"""Имя структурного экстрактора."""
+
+STRUCTURED_EXTRACTOR_PRIORITY = 0
+"""Приоритет структурного экстрактора."""
+
 RULE_EXTRACTOR_NAME = ExtractionMethod.RULE.value
 """Имя экстрактора на правилах."""
 
-RULE_EXTRACTOR_PRIORITY = 0
-"""Приоритет экстрактора на правилах (запускается первым)."""
-
-DICT_EXTRACTOR_NAME = ExtractionMethod.DICT.value
-"""Имя словарного экстрактора."""
-
-DICT_EXTRACTOR_PRIORITY = 1
-"""Приоритет словарного экстрактора."""
+RULE_EXTRACTOR_PRIORITY = 1
+"""Приоритет экстрактора на правилах."""
 
 NER_EXTRACTOR_NAME = ExtractionMethod.NER.value
 """Имя NER-экстрактора."""
 
 NER_EXTRACTOR_PRIORITY = 10
 """Приоритет NER-экстрактора."""
-
-CLASSIFIER_EXTRACTOR_NAME = ExtractionMethod.CLASSIFIER.value
-"""Имя экстрактора-классификатора."""
-
-CLASSIFIER_EXTRACTOR_PRIORITY = 20
-"""Приоритет экстрактора-классификатора."""
-
-TRANSFORMER_EXTRACTOR_NAME = ExtractionMethod.ML_TRANSFORMER.value
-"""Имя transformer-экстрактора."""
-
-TRANSFORMER_EXTRACTOR_PRIORITY = 30
-"""Приоритет transformer-экстрактора."""
-
-LLM_EXTRACTOR_NAME = ExtractionMethod.LLM.value
-"""Имя LLM-экстрактора."""
-
-LLM_EXTRACTOR_PRIORITY = 50
-"""Приоритет LLM-экстрактора (резервный, запускается последним)."""
 
 # --- Препроцессинг (Этап 0) --------------------------------------------------
 
@@ -214,22 +148,10 @@ GENERIC_SCHEMA_VERSION = "1.0.0"
 
 # --- Candidate Merging (Этап 4) ----------------------------------------------
 
-DEFAULT_METHOD_WEIGHT = 1.0
-"""Вес метода по умолчанию, если метод отсутствует в конфигурации весов."""
-
-MERGED_METHOD = ExtractionMethod.HYBRID.value
-"""Метод кандидата, объединившего значения нескольких методов."""
-
 CONFLICT_FEATURE_KEY = "conflict"
 """Ключ признака в ``AttributeCandidate.features``, отмечающий конфликт значений."""
 
 # --- Grounding Validation (Этап 5) -------------------------------------------
-
-GROUNDING_FACTOR_CONFIRMED = 1.0
-"""Множитель g_m в агрегации уверенности для подтверждённых кандидатов."""
-
-GROUNDING_FACTOR_UNCONFIRMED = 0.0
-"""Множитель g_m для неподтверждённых кандидатов."""
 
 DECIMAL_COMMA_PATTERN = r"(?<=\d),(?=\d)"
 """Десятичная запятая между цифрами (сопоставление ``6,7`` и ``6.7``)."""
@@ -317,3 +239,68 @@ CANONICAL_UNIT_ALIASES = {
     "w": "Вт",
 }
 """Унификация сокращений единиц измерения в каноническую форму (ключи в нижнем регистре)."""
+
+# --- NER / Vector / Fields ----------------------------------------------------
+
+DEFAULT_MATCH_THRESHOLD = 0.75
+"""Порог близости при векторном матче поля (match_score >= threshold)."""
+
+DEFAULT_DETERMINISTIC_CONFIDENCE = 0.90
+"""Детерминированная уверенность для structured/rule кандидатов."""
+
+AUTO_THRESHOLD = DEFAULT_CONFIDENCE_THRESHOLD
+"""Порог автоматического принятия (needs_review=False)."""
+
+REVIEW_THRESHOLD = REVIEW_CONFIDENCE_THRESHOLD
+"""Порог ручной проверки."""
+
+DEFAULT_FIELD_CATALOG_PATH = "data/field_catalog.json"
+"""Путь к каталогу полей по умолчанию."""
+
+DEFAULT_FIELD_BLOCKLIST_PATH = "data/field_blocklist.txt"
+"""Путь к блоклисту полей по умолчанию."""
+
+DEFAULT_NER_MODEL_PATH = "models/ner"
+"""Путь к NER-модели по умолчанию."""
+
+DEFAULT_VECTOR_K = 5
+"""Число ближайших кандидатов при поиске в VectorIndex."""
+
+DEFAULT_VECTOR_BACKEND = "auto"
+"""Режим работы VectorIndex (auto/embedding/lexical)."""
+
+MAX_NEW_FIELDS = 1000
+"""Максимальное число авто-добавляемых полей за сессию (защита от дрейфа)."""
+
+NER_LABEL_CHARACTERISTIC = "CHARACTERISTIC"
+"""NER-метка: характеристика (имя поля)."""
+
+NER_LABEL_PROPERTY = "PROPERTY"
+"""NER-метка: значение атрибута."""
+
+NER_PAIR_WINDOW = 32
+"""Окно пейринга PROPERTY ↔ CHARACTERISTIC (токены)."""
+
+FEATURE_CHARACTERISTIC = "characteristic"
+"""Ключ features: исходная характеристика до резолва."""
+
+FEATURE_MATCH_SCORE = "match_score"
+"""Ключ features: match_score."""
+
+FEATURE_IS_NEW_FIELD = "is_new_field"
+"""Ключ features: флаг нового поля."""
+
+SLUG_REPLACE = {
+    " ": "-",
+    "/": "-",
+    "\\": "-",
+    "(": "-",
+    ")": "-",
+    ",": "-",
+    ".": "-",
+    ";": "-",
+    ":": "-",
+    "'": "-",
+    '"': "-",
+}
+"""Замены для slugify."""

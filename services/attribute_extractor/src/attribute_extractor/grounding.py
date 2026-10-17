@@ -7,12 +7,17 @@
 и единиц измерения (``ГБ`` ↔ ``GB``). Кандидаты без подтверждения отбрасываются.
 """
 
+import html
 import re
 
 from attribute_extractor.constants import (
+    DASH_NORMALIZATION,
     DECIMAL_COMMA_PATTERN,
     GROUNDING_UNIT_ALIASES,
+    HTML_TAG_PATTERN,
     INCH_SYMBOL_PATTERN,
+    NUMBER_WORD_HYPHEN_PATTERN,
+    TOKEN_SEPARATOR_PATTERN,
     WHITESPACE_PATTERN,
 )
 from attribute_extractor.preprocessing import normalize_text
@@ -20,6 +25,9 @@ from specflow_contracts import AttributeCandidate, ProductCard, Span, SpanField
 
 _INCH_RE = re.compile(INCH_SYMBOL_PATTERN)
 _DECIMAL_COMMA_RE = re.compile(DECIMAL_COMMA_PATTERN)
+_HYPHEN_RE = re.compile(NUMBER_WORD_HYPHEN_PATTERN)
+_SEPARATOR_RE = re.compile(TOKEN_SEPARATOR_PATTERN)
+_HTML_TAG_RE = re.compile(HTML_TAG_PATTERN)
 _WHITESPACE_RE = re.compile(WHITESPACE_PATTERN)
 
 
@@ -45,16 +53,40 @@ _UNIT_RE = _build_unit_re()
 def _canonicalize(text: str) -> str:
     """Привести текст к каноническому виду для сопоставления при grounding.
 
-    Регистр, пробелы и кавычки нормализуются; десятичная запятая заменяется
-    на точку, дюймовый символ — на ``in``, синонимы единиц — на канонические.
+    Регистр, пробелы и кавычки нормализуются, ``ё`` сворачивается в ``е``
+    (каноническая форма значений вроде «черный»), HTML-сущности и теги
+    разворачиваются/вырезаются, типографские тире приводятся к ASCII-дефису,
+    десятичная запятая заменяется на точку, дюймовый символ — на ``in``,
+    дефис между числом и словом — на пробел (``6.7-дюймовый``), слэши и
+    запятые-разделители — на пробел (``i7-13620H/16Гб``), синонимы единиц —
+    на канонические.
     """
     if not text:
         return ""
-    canonical = normalize_text(text).lower()
-    canonical = _INCH_RE.sub(r"\1 in", canonical)
+    canonical = html.unescape(normalize_text(text)).lower().replace("ё", "е")
+    canonical = _HTML_TAG_RE.sub(" ", canonical)
+    for dash, replacement in DASH_NORMALIZATION.items():
+        canonical = canonical.replace(dash, replacement)
+    canonical = _INCH_RE.sub(r"\1 in ", canonical)
     canonical = _DECIMAL_COMMA_RE.sub(".", canonical)
+    canonical = _HYPHEN_RE.sub(" ", canonical)
+    canonical = _SEPARATOR_RE.sub(" ", canonical)
     canonical = _UNIT_RE.sub(lambda match: GROUNDING_UNIT_ALIASES[match.group(0)], canonical)
     return _WHITESPACE_RE.sub(" ", canonical).strip()
+
+
+def _seller_attributes_text(seller_attributes: dict | list | None) -> str | None:
+    """Собрать текстовое представление seller_attributes без repr-пунктуации.
+
+    ``str()`` над словарём добавляет кавычки и двоеточия, из-за чего значения
+    перестают находиться по токенам; ключи и значения склеиваются через
+    пробел с сохранением исходных значений.
+    """
+    if not seller_attributes:
+        return None
+    if isinstance(seller_attributes, dict):
+        return " ".join(f"{key} {value}" for key, value in seller_attributes.items())
+    return " ".join(str(item) for item in seller_attributes)
 
 
 class GroundingValidator:
@@ -86,7 +118,7 @@ class GroundingValidator:
 
     def _searchable_fields(self, card: ProductCard) -> list[tuple[SpanField, str, str, str]]:
         """Вернуть поля карточки: (field, оригинал, канонический, нормализованный)."""
-        seller_text = str(card.seller_attributes) if card.seller_attributes else None
+        seller_text = _seller_attributes_text(card.seller_attributes)
         raw_fields = (
             (SpanField.TITLE, card.title),
             (SpanField.DESCRIPTION, card.description),

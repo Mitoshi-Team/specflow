@@ -277,7 +277,8 @@ in-memory/lexical) не фиксируется. `resolve_field` возвраща
 - `src/attribute_extractor/constants.py` — значения по умолчанию и доменные
   константы (пороги, имена/приоритеты экстракторов, метки NER, версии).
 - `src/attribute_extractor/preprocessing.py` — препроцессинг карточки (Этап 0):
-  сбор `raw_text`, нормализация, язык, токенизация, резолв `CategorySchema`.
+  сбор `raw_text`, нормализация (HTML, мусорные символы, служебные вставки и
+  водяные знаки), язык, токенизация, резолв `CategorySchema`.
 - `src/attribute_extractor/extractors/` — `BaseExtractor`, `ExtractorRegistry`,
   `RuleExtractor` (🚧), `NERExtractor` (пейринг + `ner_score`).
 - `src/attribute_extractor/vector_index.py` — `VectorIndex` (Protocol) и

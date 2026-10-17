@@ -5,6 +5,7 @@
 ``CategorySchema`` с fallback на generic-схему.
 """
 
+import html
 import re
 from collections.abc import Iterable
 
@@ -12,9 +13,12 @@ from pydantic import BaseModel
 
 from attribute_extractor.constants import (
     CYRILLIC_LETTER_PATTERN,
+    DEFAULT_REMOVE_HTML_TAGS,
     DEFAULT_REMOVE_JUNK_CHARS,
+    DEFAULT_REMOVE_SERVICE_NOISE,
     GENERIC_CATEGORY,
     GENERIC_SCHEMA_VERSION,
+    HTML_TAG_PATTERN,
     JUNK_CHARS_PATTERN,
     LANGUAGE_EN,
     LANGUAGE_MIXED,
@@ -23,6 +27,7 @@ from attribute_extractor.constants import (
     LANGUAGE_UNKNOWN,
     LATIN_LETTER_PATTERN,
     QUOTE_NORMALIZATION,
+    SERVICE_NOISE_PATTERNS,
     WHITESPACE_PATTERN,
 )
 from specflow_contracts import CategorySchema, ProductCard
@@ -31,24 +36,81 @@ _JUNK_RE = re.compile(JUNK_CHARS_PATTERN)
 _WHITESPACE_RE = re.compile(WHITESPACE_PATTERN)
 _CYRILLIC_RE = re.compile(CYRILLIC_LETTER_PATTERN)
 _LATIN_RE = re.compile(LATIN_LETTER_PATTERN)
+_HTML_TAG_RE = re.compile(HTML_TAG_PATTERN, re.DOTALL)
+_SERVICE_NOISE_RE = re.compile("|".join(SERVICE_NOISE_PATTERNS), re.IGNORECASE)
+# Разделитель предложения; захватывается в split, чтобы при сборке вернуть его
+# на место. Это сохраняет точку внутри числа (``6.7``) и сокращений (``т.д.``).
+_SENTENCE_DELIMITER_RE = re.compile(r"([.;!?]+)")
+_WORD_RE = re.compile(r"\w")
 
 
-def normalize_text(text: str, *, remove_junk_chars: bool = DEFAULT_REMOVE_JUNK_CHARS) -> str:
+def strip_service_noise(text: str) -> str:
+    """Удалить служебные вставки и водяные знаки из текста (Этап 0).
+
+    Текст режется на предложения (разделители сохраняются). В каждом
+    предложении удаляются фразы-маркеры из ``SERVICE_NOISE_PATTERNS`` (шум
+    из EDA: «Подборки», «Продавец», BI-поля, «Гарантия предоставляется»,
+    «Потратить бонусы», рекламные «шаблоны»). Если предложение состояло
+    только из шума, оно отбрасывается целиком вместе с завершающей
+    пунктуацией — иначе оставались бы висящие точки. Содержательные
+    предложения лишь очищаются: их значения нужны для извлечения и
+    grounding.
+
+    Разделители сохраняются как в исходном тексте, поэтому десятичные точки
+    (``6.7``) и сокращения (``т.д.``) не разрываются пробелами.
+    """
+    if not text:
+        return text
+    parts = _SENTENCE_DELIMITER_RE.split(text)
+    kept: list[str] = []
+    for index in range(0, len(parts), 2):
+        piece = parts[index]
+        delimiter = parts[index + 1] if index + 1 < len(parts) else ""
+        if not piece.strip():
+            kept.append(delimiter)
+            continue
+        cleaned = _SERVICE_NOISE_RE.sub(" ", piece)
+        if _SERVICE_NOISE_RE.search(piece) and not _WORD_RE.search(cleaned):
+            continue
+        kept.append(cleaned + delimiter)
+    return _WHITESPACE_RE.sub(" ", "".join(kept)).strip()
+
+
+def normalize_text(
+    text: str,
+    *,
+    remove_junk_chars: bool = DEFAULT_REMOVE_JUNK_CHARS,
+    remove_html_tags: bool = DEFAULT_REMOVE_HTML_TAGS,
+    remove_service_noise: bool = DEFAULT_REMOVE_SERVICE_NOISE,
+) -> str:
     """Нормализовать текст карточки для поиска.
 
-    Сжимает множественные пробелы, унифицирует переносы строк и табуляции,
-    нормализует типографские кавычки и (опционально) удаляет мусорные
-    символы. Регистр сохраняется: нормализация нужна для поиска по словарям,
-    а не для изменения содержания.
+    Снимает HTML-теги (и декодирует HTML-сущности), сжимает множественные
+    пробелы, унифицирует переносы строк и табуляции, нормализует
+    типографские кавычки и (опционально) удаляет мусорные символы и
+    служебные вставки/водяные знаки. Регистр сохраняется: нормализация
+    нужна для поиска по словарям, а не для изменения содержания.
+
+    Тег заменяется пробелом, а не удаляется целиком: ``<br>``/``<p>``
+    разделяют слова, а склейка ``Экран<br>6.7`` → ``Экран6.7`` сломала бы
+    сопоставление значений. Для инлайновых тегов (``<b>``, ``<sup>``)
+    лишний пробел безвреден — токенизация и так работает по пробелам.
     """
     if not text:
         return ""
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     normalized = normalized.replace("\n", " ").replace("\t", " ")
+    if remove_html_tags:
+        # Декодирование идёт до снятия тегов: экранированная разметка
+        # (``&lt;b&gt;``) становится настоящим тегом и тоже удаляется.
+        normalized = html.unescape(normalized)
+        normalized = _HTML_TAG_RE.sub(" ", normalized)
     for source, target in QUOTE_NORMALIZATION.items():
         normalized = normalized.replace(source, target)
     if remove_junk_chars:
         normalized = _JUNK_RE.sub("", normalized)
+    if remove_service_noise:
+        normalized = strip_service_noise(normalized)
     return _WHITESPACE_RE.sub(" ", normalized).strip()
 
 
@@ -144,9 +206,13 @@ class CardPreprocessor:
         schemas: SchemaRegistry | None = None,
         *,
         remove_junk_chars: bool = DEFAULT_REMOVE_JUNK_CHARS,
+        remove_html_tags: bool = DEFAULT_REMOVE_HTML_TAGS,
+        remove_service_noise: bool = DEFAULT_REMOVE_SERVICE_NOISE,
     ) -> None:
         self._schemas = schemas if schemas is not None else SchemaRegistry()
         self._remove_junk_chars = remove_junk_chars
+        self._remove_html_tags = remove_html_tags
+        self._remove_service_noise = remove_service_noise
 
     def preprocess(self, card: ProductCard) -> PreprocessedCard:
         """Собрать ``raw_text``, нормализовать текст, определить язык и схему.
@@ -156,7 +222,12 @@ class CardPreprocessor:
         автоопределением.
         """
         raw_text = card.raw_text
-        normalized_text = normalize_text(raw_text, remove_junk_chars=self._remove_junk_chars)
+        normalized_text = normalize_text(
+            raw_text,
+            remove_junk_chars=self._remove_junk_chars,
+            remove_html_tags=self._remove_html_tags,
+            remove_service_noise=self._remove_service_noise,
+        )
         language = card.language.strip() if card.language else ""
         if not language:
             language = detect_language(normalized_text)

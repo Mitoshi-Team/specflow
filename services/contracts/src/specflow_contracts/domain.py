@@ -93,6 +93,9 @@ class AttributeCandidate(BaseModel):
     is_confirmed_in_text: bool
     source_spans: list[Span] = Field(default_factory=list)
     evidence_text: str | None = None
+    ner_score: float | None = Field(default=None, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE)
+    match_score: float | None = Field(default=None, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE)
+    is_new_field: bool = False
     features: dict[str, Any] | None = None
 
 

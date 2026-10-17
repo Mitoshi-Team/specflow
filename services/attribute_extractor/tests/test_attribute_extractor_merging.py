@@ -19,6 +19,9 @@ def _candidate(
     spans: list[Span] | None = None,
     evidence: str | None = None,
     features: dict[str, object] | None = None,
+    ner_score: float | None = None,
+    match_score: float | None = None,
+    is_new_field: bool = False,
 ) -> AttributeCandidate:
     return AttributeCandidate(
         attribute_code=code,
@@ -29,6 +32,9 @@ def _candidate(
         is_confirmed_in_text=confirmed,
         source_spans=spans or [],
         evidence_text=evidence,
+        ner_score=ner_score,
+        match_score=match_score,
+        is_new_field=is_new_field,
         features=features,
     )
 
@@ -194,3 +200,37 @@ def test_conflict_merges_features_from_kept_candidate() -> None:
         ]
     )
     assert result[0].features == {"source": "rule", CONFLICT_FEATURE_KEY: True}
+
+
+def test_merge_preserves_tracing_fields_of_best_candidate() -> None:
+    """ner_score/match_score/is_new_field победителя сохраняются при объединении."""
+    result = CandidateMerger().merge(
+        [
+            _candidate(
+                method=ExtractionMethod.NER,
+                confidence=0.95,
+                ner_score=0.95,
+                match_score=0.81,
+                is_new_field=True,
+            ),
+            _candidate(method=ExtractionMethod.NER, confidence=0.6, ner_score=0.6),
+        ]
+    )
+    assert len(result) == 1
+    assert result[0].ner_score == pytest.approx(0.95)
+    assert result[0].match_score == pytest.approx(0.81)
+    assert result[0].is_new_field is True
+
+
+def test_conflict_preserves_tracing_fields_of_best_candidate() -> None:
+    """При конфликте трассировочные поля берутся у победителя по confidence."""
+    result = CandidateMerger().merge(
+        [
+            _candidate("black", confidence=0.9, ner_score=0.9, match_score=0.7, is_new_field=True),
+            _candidate("white", confidence=0.5, ner_score=0.5),
+        ]
+    )
+    assert result[0].normalized_value == "black"
+    assert result[0].ner_score == pytest.approx(0.9)
+    assert result[0].match_score == pytest.approx(0.7)
+    assert result[0].is_new_field is True

@@ -1,8 +1,8 @@
-"""FieldCatalog, FieldBlocklist, FieldResolver (минимум для NER+эмбеддингов)."""
+"""FieldCatalog, FieldBlocklist, FieldResolver (резолв характеристик в коды полей)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from attribute_extractor import slugify
 from attribute_extractor.catalog_store import CatalogStore
@@ -14,12 +14,15 @@ from attribute_extractor.constants import (
 )
 from attribute_extractor.vector_index import InMemoryVectorIndex, LexicalVectorIndex
 
+FIELD_TEXT_SEPARATOR = " ; "
+"""Разделитель имени поля и синонимов при сборке текста для индексации."""
+
 
 @dataclass
 class FieldCatalogEntry:
     code: str
     name_ru: str
-    synonyms: list[str] | None = None
+    synonyms: list[str] = field(default_factory=list)
     value_type: str | None = None
     unit: str | None = None
     is_new_field: bool = False
@@ -32,6 +35,11 @@ class CharacteristicMatch:
     match_score: float
     is_new_field: bool
     blocked: bool
+
+
+def _entry_text(entry: FieldCatalogEntry) -> str:
+    """Текст поля для индексации: каноническое имя и все синонимы."""
+    return FIELD_TEXT_SEPARATOR.join([entry.name_ru, *entry.synonyms])
 
 
 class FieldBlocklist:
@@ -54,6 +62,24 @@ class FieldCatalog:
         self._entries: dict[str, FieldCatalogEntry] = {}
         for e in entries or []:
             self._entries[e.code] = e
+
+    @classmethod
+    def from_store(cls, store: CatalogStore) -> FieldCatalog:
+        """Загрузить каталог из персистентного хранилища (пустой, если нет данных)."""
+        data = store.load_catalog()
+        entries = [
+            FieldCatalogEntry(
+                code=item["code"],
+                name_ru=item.get("name_ru", item["code"]),
+                synonyms=list(item.get("synonyms") or []),
+                value_type=item.get("value_type"),
+                unit=item.get("unit"),
+                is_new_field=bool(item.get("is_new_field", False)),
+            )
+            for item in data.get("entries", [])
+            if item.get("code")
+        ]
+        return cls(entries)
 
     def all(self) -> list[FieldCatalogEntry]:
         return list(self._entries.values())
@@ -79,14 +105,19 @@ class FieldResolver:
         match_threshold: float = DEFAULT_MATCH_THRESHOLD,
         vector_k: int = DEFAULT_VECTOR_K,
     ) -> None:
-        self.catalog = catalog or FieldCatalog()
-        self.blocklist = blocklist or FieldBlocklist()
-        self.vector_index = vector_index or LexicalVectorIndex()
         self.store = store or CatalogStore(DEFAULT_FIELD_CATALOG_PATH, DEFAULT_FIELD_BLOCKLIST_PATH)
+        self.catalog = catalog if catalog is not None else FieldCatalog.from_store(self.store)
+        self.blocklist = (
+            blocklist if blocklist is not None else FieldBlocklist(self.store.load_blocklist())
+        )
+        self.vector_index = vector_index or LexicalVectorIndex()
         self.match_threshold = match_threshold
         self.vector_k = vector_k
-        for e in self.catalog.all():
-            self.vector_index.add(e.code)
+        self._index_catalog()
+
+    def _index_catalog(self) -> None:
+        for entry in self.catalog.all():
+            self.vector_index.add(entry.code, self.vector_index.embed(_entry_text(entry)))
 
     def resolve(self, characteristic: str) -> CharacteristicMatch:
         if not characteristic:
@@ -120,7 +151,17 @@ class FieldResolver:
         code = slugify.slugify(characteristic)
         entry = FieldCatalogEntry(code=code, name_ru=characteristic, is_new_field=True)
         self.catalog.add_new(entry)
-        self.vector_index.add(code)
+        self.vector_index.add(code, self.vector_index.embed(_entry_text(entry)))
+        self._persist_new_field(code, characteristic)
+        return CharacteristicMatch(
+            characteristic=characteristic,
+            matched_code=code,
+            match_score=float(results[0][1]) if results else 0.0,
+            is_new_field=True,
+            blocked=False,
+        )
+
+    def _persist_new_field(self, code: str, characteristic: str) -> None:
         try:
             data = self.store.load_catalog()
             entries = data.get("entries", [])
@@ -130,10 +171,3 @@ class FieldResolver:
                 self.store.save_catalog(data)
         except Exception:
             pass
-        return CharacteristicMatch(
-            characteristic=characteristic,
-            matched_code=code,
-            match_score=float(results[0][1]) if results else 0.0,
-            is_new_field=True,
-            blocked=False,
-        )

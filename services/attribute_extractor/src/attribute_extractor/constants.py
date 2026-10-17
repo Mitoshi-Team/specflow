@@ -269,6 +269,9 @@ DEFAULT_VECTOR_K = 5
 DEFAULT_VECTOR_BACKEND = "auto"
 """Режим работы VectorIndex (auto/embedding/lexical)."""
 
+DEFAULT_VECTOR_DIM = 512
+"""Размерность лексического (hashed bag-of-words) индекса."""
+
 MAX_NEW_FIELDS = 1000
 """Максимальное число авто-добавляемых полей за сессию (защита от дрейфа)."""
 

@@ -73,6 +73,7 @@ export type ProductCardRequest = {
   product_id?: string
   title?: string
   description?: string
+  // seller_attributes принимаются контрактом, но пайплайном не используются (разметка)
   seller_attributes?: Record<string, unknown>
   category_id?: string
   category_name?: string
@@ -139,7 +140,7 @@ export type BatchExtractResponse = {
 1. Пользователь выбирает CSV или JSON-файл с карточками.
 2. Фронт парсит файл (валидация минимального набора полей).
 3. Отображает предпросмотр (первые 10–20 строк).
-4. Проверяет наличие хотя бы одного из: `title`, `description`, `seller_attributes`.
+4. Проверяет наличие хотя бы одного из: `title`, `description`, `seller_attributes` (пайплайн извлечения использует только `title`/`description`).
 
 ### Сценарий 2. Пакетная обработка
 
@@ -199,7 +200,7 @@ export type BatchExtractResponse = {
 
 **JSON:** массив объектов `ProductCardRequest`.
 
-**Валидация:** минимум одно непустое из `title|description|seller_attributes`; корректный JSON в `seller_attributes` (если строка); не пустой файл; разумный размер; расширение `.csv`, `.json`, `.tsv` (опц.).
+**Валидация:** минимум одно непустое из `title|description|seller_attributes`; корректный JSON в `seller_attributes` (если строка); не пустой файл; разумный размер; расширение `.csv`, `.json`, `.tsv` (опц.). Колонка `seller_attributes` отталкивается от сырых данных, но пайплайном не используется — источник разметки.
 
 ## 7. Состояние и хуки
 

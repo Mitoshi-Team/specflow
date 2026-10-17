@@ -16,3 +16,8 @@ dist/
 target/
 .vite/
 *.log/
+
+# Артефакты attribute_extractor: персистентный каталог полей,
+# weak/gold-датасеты и веса NER-модели (генерируются, не коммитятся).
+data/
+models/

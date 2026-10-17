@@ -228,7 +228,7 @@ def grounding_errors(records: Sequence[Mapping]) -> list[str]:
             product_id=str(card_data.get("sku_id") or ""),
             title=card_data.get("title"),
             description=card_data.get("description"),
-            seller_attributes=card_data.get("seller_attributes"),
+            seller_attributes=None,
             category_id=card_data.get("category_id"),
             category_name=card_data.get("category_name"),
         )

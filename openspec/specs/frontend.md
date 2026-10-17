@@ -93,7 +93,7 @@ export type AttributePrediction = {
   confidence: number
   evidence_text?: string
   source_spans?: Span[]
-  extraction_method: 'structured'|'rule'|'ner'
+  extraction_method: 'rule'|'ner'
   is_confirmed_in_text: boolean
   ner_score?: number
   match_score?: number

@@ -1,18 +1,24 @@
-"""Grounding Validation — обязательная проверка подтверждения значений (Этап 5).
+"""Grounding Validation — обязательная проверка подтверждения значений (Этап 9).
 
-Согласно openspec/specs/attribute_extractor.md (Этап 5), все финальные
-кандидаты должны быть подтверждены в исходном тексте карточки. Проверяется
-``evidence_text`` или ключевые токены значения: точное/нормализованное
-подстроковое совпадение с учётом регистра, пробелов, чисел (``6,7`` ↔ ``6.7``)
-и единиц измерения (``ГБ`` ↔ ``GB``). Кандидаты без подтверждения отбрасываются.
+Согласно openspec/specs/attribute_extractor.md (Этап 9), все финальные
+кандидаты должны быть подтверждены в исходном тексте карточки: заголовке и
+определении — это вход пайплайна (seller-атрибуты входом не являются).
+Проверяется ``evidence_text`` или ключевые токены значения: точное/нормализованное
+подстроковое совпадение с учётом регистра, пробелов, чисел (``6,7`` ↔ ``6.7``),
+единиц измерения (``ГБ`` ↔ ``GB``, ``128GB`` ↔ ``128 gb``) и синонимов цветов
+(``Black`` подтверждает канон «черный»). Кандидаты без подтверждения
+отбрасываются.
 """
 
 import html
 import re
 
 from attribute_extractor.constants import (
+    COLOR_SYNONYMS,
     DASH_NORMALIZATION,
     DECIMAL_COMMA_PATTERN,
+    DIGIT_LETTER_PATTERN,
+    DOT_SEPARATOR_PATTERN,
     GROUNDING_UNIT_ALIASES,
     HTML_TAG_PATTERN,
     INCH_SYMBOL_PATTERN,
@@ -25,6 +31,8 @@ from specflow_contracts import AttributeCandidate, ProductCard, Span, SpanField
 
 _INCH_RE = re.compile(INCH_SYMBOL_PATTERN)
 _DECIMAL_COMMA_RE = re.compile(DECIMAL_COMMA_PATTERN)
+_DIGIT_LETTER_RE = re.compile(DIGIT_LETTER_PATTERN)
+_DOT_RE = re.compile(DOT_SEPARATOR_PATTERN)
 _HYPHEN_RE = re.compile(NUMBER_WORD_HYPHEN_PATTERN)
 _SEPARATOR_RE = re.compile(TOKEN_SEPARATOR_PATTERN)
 _HTML_TAG_RE = re.compile(HTML_TAG_PATTERN)
@@ -56,10 +64,12 @@ def _canonicalize(text: str) -> str:
     Регистр, пробелы и кавычки нормализуются, ``ё`` сворачивается в ``е``
     (каноническая форма значений вроде «черный»), HTML-сущности и теги
     разворачиваются/вырезаются, типографские тире приводятся к ASCII-дефису,
-    десятичная запятая заменяется на точку, дюймовый символ — на ``in``,
-    дефис между числом и словом — на пробел (``6.7-дюймовый``), слэши и
-    запятые-разделители — на пробел (``i7-13620H/16Гб``), синонимы единиц —
-    на канонические.
+    десятичная запятая заменяется на точку, дюймовый символ — на ``in``.
+    Слипшиеся токены разлипаются: граница «цифра → буква» (``128GB`` →
+    ``128 gb``, ``16Гб`` → ``16 гб``), несистемные точки не отделяются от
+    десятичных (``50 in.`` → ``50 in``, ``6.7`` остаётся), дефис между числом
+    и словом — на пробел (``6.7-дюймовый``), слэши и запятые-разделители —
+    на пробел (``i7-13620H/16Гб``), синонимы единиц — на канонические.
     """
     if not text:
         return ""
@@ -69,30 +79,16 @@ def _canonicalize(text: str) -> str:
         canonical = canonical.replace(dash, replacement)
     canonical = _INCH_RE.sub(r"\1 in ", canonical)
     canonical = _DECIMAL_COMMA_RE.sub(".", canonical)
+    canonical = _DIGIT_LETTER_RE.sub(" ", canonical)
+    canonical = _DOT_RE.sub(" ", canonical)
     canonical = _HYPHEN_RE.sub(" ", canonical)
     canonical = _SEPARATOR_RE.sub(" ", canonical)
     canonical = _UNIT_RE.sub(lambda match: GROUNDING_UNIT_ALIASES[match.group(0)], canonical)
     return _WHITESPACE_RE.sub(" ", canonical).strip()
 
 
-def _seller_attributes_text(seller_attributes: dict | list | None) -> str | None:
-    """Собрать текстовое представление seller_attributes без repr-пунктуации.
-
-    ``str()`` над словарём добавляет кавычки и двоеточия, из-за чего значения
-    перестают находиться по токенам; ключи и значения склеиваются через
-    пробел, а сами атрибуты разделяются точкой с запятой — это сохраняет
-    границы предложений для фильтра служебных вставок (``Продавец ...`` не
-    съедает остальные атрибуты).
-    """
-    if not seller_attributes:
-        return None
-    if isinstance(seller_attributes, dict):
-        return "; ".join(f"{key} {value}" for key, value in seller_attributes.items())
-    return "; ".join(str(item) for item in seller_attributes)
-
-
 class GroundingValidator:
-    """Проверяет, что кандидаты подтверждены текстом карточки (Этап 5)."""
+    """Проверяет, что кандидаты подтверждены текстом карточки (Этап 9)."""
 
     def is_grounded(self, candidate: AttributeCandidate, card: ProductCard) -> bool:
         """Подтверждён ли кандидат в тексте карточки."""
@@ -101,7 +97,7 @@ class GroundingValidator:
     def filter(
         self, candidates: list[AttributeCandidate], card: ProductCard
     ) -> list[AttributeCandidate]:
-        """Hard filter: оставить только подтверждённые кандидаты (Этап 5).
+        """Hard filter: оставить только подтверждённые кандидаты (Этап 9).
 
         Проставляет ``is_confirmed_in_text=True`` и, если у кандидата нет
         ``source_spans``, добавляет span найденного упоминания.
@@ -119,18 +115,30 @@ class GroundingValidator:
         return confirmed
 
     def _searchable_fields(self, card: ProductCard) -> list[tuple[SpanField, str, str, str]]:
-        """Вернуть поля карточки: (field, оригинал, канонический, нормализованный)."""
-        seller_text = _seller_attributes_text(card.seller_attributes)
+        """Вернуть поля карточки: (field, оригинал, канонический, нормализованный).
+
+        Seller-атрибуты не участвуют: вход пайплайна — только заголовок и
+        описание (характеристики извлекаются из свободного текста).
+        """
         raw_fields = (
             (SpanField.TITLE, card.title),
             (SpanField.DESCRIPTION, card.description),
-            (SpanField.SELLER_ATTRIBUTES, seller_text),
         )
         return [
             (field, text, _canonicalize(text), normalize_text(text).lower())
             for field, text in raw_fields
             if text
         ]
+
+    def _value_token_sets(self, candidate: AttributeCandidate, value: str) -> list[list[str]]:
+        """Варианты token-наборов значения: канон + синонимы цветов (``Black``)."""
+        sets = [_canonicalize(value).split()]
+        if candidate.attribute_code == "color":
+            canonical = _canonicalize(value)
+            sets += [
+                _canonicalize(synonym).split() for synonym in COLOR_SYNONYMS.get(canonical, ())
+            ]
+        return [tokens for tokens in sets if tokens]
 
     def _find_span(
         self, candidate: AttributeCandidate, fields: list[tuple[SpanField, str, str, str]]
@@ -153,12 +161,13 @@ class GroundingValidator:
                             field=field, text=evidence
                         )
         value = candidate.normalized_value or candidate.raw_value
-        tokens = _canonicalize(value).split()
-        if tokens:
-            for field, _, canonical, _ in fields:
-                field_tokens = set(canonical.split())
-                if all(token in field_tokens for token in tokens):
-                    return Span(field=field, text=value)
+        for field, _, canonical, _ in fields:
+            field_tokens = set(canonical.split())
+            if any(
+                all(token in field_tokens for token in tokens)
+                for tokens in self._value_token_sets(candidate, value)
+            ):
+                return Span(field=field, text=value)
         return None
 
     @staticmethod

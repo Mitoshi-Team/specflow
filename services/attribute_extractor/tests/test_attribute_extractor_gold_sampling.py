@@ -261,7 +261,7 @@ class TestGroundingErrors:
         )
         assert grounding_errors([record]) == []
 
-    def test_seller_attributes_field_is_searchable(self):
+    def test_seller_attributes_are_ignored_by_grounding(self):
         card = make_card(
             "s1",
             title="Смартфон",
@@ -273,7 +273,7 @@ class TestGroundingErrors:
             expected=[{"attribute_code": "battery_capacity", "normalized_value": "5000 мА·ч"}],
             card=card,
         )
-        assert grounding_errors([record]) == []
+        assert grounding_errors([record]) != []
 
 
 def load_gold() -> list[dict]:

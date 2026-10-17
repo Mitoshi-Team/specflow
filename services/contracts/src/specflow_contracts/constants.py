@@ -21,3 +21,9 @@ DEFAULT_RETURN_SOURCES = True
 
 DEFAULT_RETURN_RAW_VALUES = True
 """Возвращать ли сырые значения в пакетном ответе по умолчанию."""
+
+RAW_TITLE_LABEL = "Заголовок:"
+"""Метка секции заголовка в ``raw_text`` (заголовок анализируется отдельно)."""
+
+RAW_DESCRIPTION_LABEL = "Описание:"
+"""Метка секции описания в ``raw_text``."""

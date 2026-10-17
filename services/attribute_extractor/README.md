@@ -1,12 +1,12 @@
 # Attribute Extractor
 
-Сервис извлечения атрибутов товаров из карточек (title, description,
-`seller_attributes`) на FastAPI.
+Сервис извлечения атрибутов товаров из карточек (title, description) на FastAPI.
 
-Пайплайн — **целевой гибрид без LLM**: чистка → structured → правила → NER →
-векторный матч полей → нормализация → rules-fallback → мёржа → grounding →
-уверенность. Генеративные модели не используются; главный инвариант —
-«не выдумывать характеристики».
+Пайплайн — **целевой гибрид без LLM**, вход ограничен заголовком и описанием
+(seller-атрибуты — источник разметки для обучения, но не вход): чистка →
+правила → NER → векторный матч полей → нормализация → rules-fallback →
+мёржа → grounding → уверенность. Генеративные модели не используются; главный
+инвариант — «не выдумывать характеристики».
 
 ## 1. Разделение ответственности
 
@@ -17,7 +17,7 @@ RAG-кластеризация, gold-набор и метрики) и Савел
 | --- | --- | --- |
 | Этап 0. Чистка и препроцессинг | Савелий | HTML, мусор, нормализация текста, язык |
 | Этап 1. Резолв схемы категории | Савелий | `SchemaRegistry`, generic-fallback |
-| Этап 2. Structured (`seller_attributes`) | Савелий | key→value детерминирован |
+| Этап 2. Удалён (seller-атрибуты — не вход) | — | источник разметки для обучения |
 | Этап 3. Ядро правил (регэкспы, единицы) | Савелий | explainable, ядро |
 | Этап 4. NER (`CHARACTERISTIC` + `PROPERTY`) | Матвей | модель, пейринг, `ner_score` |
 | Этап 5. Резолв поля — блоклист | Савелий | стоп-слова служебных «атрибутов» |
@@ -57,7 +57,7 @@ flowchart TD
         direction TB
         S0["Этап 0. Чистка и препроцессинг"]:::det
         S1["Этап 1. Резолв схемы категории"]:::det
-        S2["Этап 2. Structured (seller_attributes)"]:::det
+        S2["Этап 2. Удалён (seller-атрибуты — не вход)"]:::data
         S3["Этап 3. Ядро правил"]:::det
         S4["Этап 4. NER: CHARACTERISTIC + PROPERTY"]:::ours
         S5["Этап 5. Резолв поля:<br/>блоклист + векторный матч"]:::ours
@@ -129,9 +129,8 @@ class CleanedCard:
     sku_id: str
     title: str
     description: str
-    seller_attributes: dict[str, str]
     language: str          # "ru" | "en" | "mixed"
-    raw_text: str          # очищенный конкат текста
+    raw_text: str          # сырой конкат текста с метками секций («Заголовок:», «Описание:»)
 
 
 @dataclass
@@ -172,7 +171,6 @@ class ConfidenceConfig:
 ```python
 def clean(card: ProductCard) -> CleanedCard                                    # 🎯 (сейчас CardPreprocessor.preprocess)
 def resolve_schema(card: ProductCard, registry: SchemaRegistry) -> CategorySchema  # ✅ SchemaRegistry.resolve
-def extract_structured(card: CleanedCard, schema: CategorySchema) -> list[AttributeCandidate]  # 🎯
 def extract_rules(card: CleanedCard, schema: CategorySchema) -> list[AttributeCandidate]       # 🚧 RuleExtractor.extract
 def normalize_value(raw: str, field: FieldCatalogEntry | None) -> NormalizedValue              # ✅ ValueNormalizer.normalize
 def rules_fallback(card: CleanedCard, schema: CategorySchema, missing: set[str]) -> list[AttributeCandidate]  # 🎯
@@ -220,7 +218,7 @@ in-memory/lexical) не фиксируется. `resolve_field` возвраща
 данные — это подмена реализации/порядка, без правки компонентов:
 
 - **Включение/выключение этапов:** NER и векторный матч — опциональны (graceful
-  degradation до structured/rules).
+  degradation до rules).
 - **Пороги:** `MATCH_THRESHOLD`, `AUTO_THRESHOLD`, `REVIEW_THRESHOLD`,
   `DETERMINISTIC_CONFIDENCE` — через `ConfidenceConfig`/Pydantic Settings.
 - **Реализации:** `VectorIndex`, NER-модель, блоклист, каталог — инъекция (DI).
@@ -242,8 +240,7 @@ in-memory/lexical) не фиксируется. `resolve_field` возвраща
   "card": {
     "sku_id": "123456",
     "title": "Смартфон Acme X 8/256 ГБ, чёрный",
-    "description": "Экран 6.7 дюйма, батарея 5000 мА·ч",
-    "seller_attributes": {"Бренд": "Acme", "Объём памяти": "256 ГБ"}
+    "description": "Экран 6.7 дюйма, батарея 5000 мА·ч"
   },
   "expected": [
     {"attribute_code": "brand", "normalized_value": "Acme"},
@@ -256,12 +253,19 @@ in-memory/lexical) не фиксируется. `resolve_field` возвраща
 }
 ```
 
+Формат карточки соответствует **реальному входу пайплайна**: сырые `title` и
+`description` с всем шумом (HTML, служебные вставки) — очистку делает сам
+пайплайн (Этап 0); seller-атрибуты в карточку не включаются и служат
+источником проверки/разметки при разметке gold.
+
 **Конвенции значений** (как в словарях/единицах нормализации): `256 ГБ`,
 `5000 мА·ч`, `6,7 дюйм` (десятичная запятая), цвет — строчными («черный»,
-ё→е); brand/model/processor — как в тексте карточки. Ожидаются только
-реально присутствующие в тексте значения (grounding): точные значения из
-параметров `*_search` допустимы, диапазоны продавца (`3000-5000 мАч`) — нет;
-источник спорного значения фиксируется в `notes`.
+ё→е); brand/model/processor — как в тексте карточки. В `expected` только
+значения, реально присутствующие в заголовке/описании (grounding; EN-написание
+цвета подтверждает русский канон через словарь синонимов), диапазоны продавца
+(`3000-5000 мАч`) не берутся; значения, существующие только в
+seller-атрибутах и недостижимые из текста, исключаются из `expected` с
+пометкой в `notes`.
 
 **Валидация:** `validate_gold` (структура, дубликаты sku, канонические коды)
 и `grounding_errors` (подтверждение текстом карточки); регрессионный тест на

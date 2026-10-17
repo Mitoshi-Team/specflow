@@ -1,0 +1,54 @@
+name: Mirror to Gitea
+
+# Зеркало GitHub -> Gitea: при каждом push/удалении ветки или тега, а также по
+# расписанию синхронизирует все ветки и теги в Gitea-репозиторий проекта.
+on:
+  push:
+  delete:
+  schedule:
+    # Периодическая сверка на случай потерянного события push.
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Не допускаем параллельных зеркалирований: одновременные push в Gitea конфликтуют.
+concurrency:
+  group: mirror-to-gitea
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: Push mirror to Gitea
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror branches and tags to Gitea
+        env:
+          GITEA_USER: ${{ secrets.GITEA_USER }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          GITEA_REPO: git.hub.gigaschool.ru/tochka-sborki-2026-team-032/project.git
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEA_USER}" ] || [ -z "${GITEA_TOKEN}" ]; then
+            echo "::error::Секреты GITEA_USER и GITEA_TOKEN должны быть заданы"
+            exit 1
+          fi
+
+          # Зеркалим из «чистого» bare-репозитория, чтобы --mirror переносил
+          # ровно ветки и теги (без remote-tracking refs и refs/pull).
+          rm -rf mirror.git
+          git init --bare mirror.git
+          cd mirror.git
+          git remote add github "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git"
+          git config remote.github.fetch '+refs/heads/*:refs/heads/*'
+          git config --add remote.github.fetch '+refs/tags/*:refs/tags/*'
+          git fetch --prune --quiet github
+
+          git remote add gitea "https://${GITEA_USER}:${GITEA_TOKEN}@${GITEA_REPO}"
+          git push --mirror --quiet gitea
+
+          echo "Mirrored refs: $(git for-each-ref --format='%(refname)' | wc -l)"

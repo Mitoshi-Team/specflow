@@ -12,7 +12,7 @@ from attribute_extractor.constants import (
     DEFAULT_MATCH_THRESHOLD,
     DEFAULT_VECTOR_K,
 )
-from attribute_extractor.vector_index import InMemoryVectorIndex, LexicalVectorIndex
+from attribute_extractor.vector_index import LexicalVectorIndex, VectorIndex
 
 FIELD_TEXT_SEPARATOR = " ; "
 """Разделитель имени поля и синонимов при сборке текста для индексации."""
@@ -100,7 +100,7 @@ class FieldResolver:
         self,
         catalog: FieldCatalog | None = None,
         blocklist: FieldBlocklist | None = None,
-        vector_index: InMemoryVectorIndex | LexicalVectorIndex | None = None,
+        vector_index: VectorIndex | None = None,
         store: CatalogStore | None = None,
         match_threshold: float = DEFAULT_MATCH_THRESHOLD,
         vector_k: int = DEFAULT_VECTOR_K,

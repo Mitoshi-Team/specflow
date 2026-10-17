@@ -1,13 +1,21 @@
-"""VectorIndex: абстрактный интерфейс и лексический fallback (hashed BoW)."""
+"""VectorIndex: абстрактный интерфейс, лексический fallback и семантический индекс."""
 
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import re
-from typing import Protocol
+from typing import Any, Protocol
 
-from attribute_extractor.constants import DEFAULT_VECTOR_DIM
+from attribute_extractor.constants import (
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_VECTOR_BACKEND,
+    DEFAULT_VECTOR_DIM,
+    VECTOR_BACKEND_LEXICAL,
+)
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[0-9a-zа-яё]+")
 _NOISE_RE = re.compile(r"[.,;:()\[\]{}\"'/\\|]+")
@@ -88,3 +96,69 @@ class LexicalVectorIndex:
 
 class InMemoryVectorIndex(LexicalVectorIndex):
     """MVP-реализация в памяти (лексический fallback)."""
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    """Косинус L2-нормированных векторов (для нормированных — скалярное произведение)."""
+    if not a or not b:
+        return 0.0
+    return float(sum(x * y for x, y in zip(a, b, strict=False)))
+
+
+class EncoderVectorIndex:
+    """Семантический индекс на ``sentence-transformers`` (multilingual encoder).
+
+    Модель загружается в конструкторе, чтобы недоступность зависимости/модели
+    обнаруживалась сразу и фабрика могла деградировать до лексического индекса.
+    Модель можно передать явно (для тестов).
+    """
+
+    def __init__(self, model_name: str = DEFAULT_EMBEDDING_MODEL, model: Any = None) -> None:
+        self._model_name = model_name
+        self._model: Any = model if model is not None else self._load_model(model_name)
+        self._keys: list[str] = []
+        self._vectors: list[list[float]] = []
+        self._seen: set[str] = set()
+
+    @staticmethod
+    def _load_model(model_name: str) -> Any:
+        from sentence_transformers import SentenceTransformer
+
+        return SentenceTransformer(model_name)
+
+    def embed(self, text: str) -> list[float]:
+        raw = self._model.encode(text or "", normalize_embeddings=True)
+        return [float(value) for value in raw]
+
+    def add(self, key: str, vector: list[float] | None = None) -> None:
+        if key in self._seen:
+            return
+        self._seen.add(key)
+        self._keys.append(key)
+        self._vectors.append(vector if vector is not None else self.embed(key))
+
+    def search(self, vector: list[float], k: int = 5) -> list[tuple[str, float]]:
+        scores = [
+            (key, _cosine(vector, stored))
+            for key, stored in zip(self._keys, self._vectors, strict=True)
+        ]
+        scores.sort(key=lambda item: item[1], reverse=True)
+        return scores[:k]
+
+
+def build_vector_index(
+    backend: str = DEFAULT_VECTOR_BACKEND,
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
+) -> LexicalVectorIndex | EncoderVectorIndex:
+    """Собрать VectorIndex по режиму с graceful degradation.
+
+    ``lexical`` — только лексический; иначе — семантический, а при недоступности
+    зависимости/модели — лексический (со предупреждением в лог).
+    """
+    if backend == VECTOR_BACKEND_LEXICAL:
+        return LexicalVectorIndex()
+    try:
+        return EncoderVectorIndex(model_name)
+    except Exception as exc:  # noqa: BLE001 — деградация на любой сбой загрузки
+        logger.warning("Семантический VectorIndex недоступен (%s); лексический fallback", exc)
+        return LexicalVectorIndex()

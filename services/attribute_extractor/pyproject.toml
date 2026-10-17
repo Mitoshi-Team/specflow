@@ -11,6 +11,10 @@ dependencies = [
     "specflow-contracts",
 ]
 
+[project.optional-dependencies]
+# Семантический VectorIndex (резолв полей). Без него работает лексический fallback.
+embeddings = ["sentence-transformers>=3"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

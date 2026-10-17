@@ -1,19 +1,25 @@
 """Настройки сервиса извлечения атрибутов."""
 
+from typing import Literal
+
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from attribute_extractor.constants import (
     API_PREFIX,
     DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_EMBEDDING_MODEL,
     DEFAULT_ENUM_STRICT,
     DEFAULT_GROUNDING_REQUIRED,
+    DEFAULT_MATCH_THRESHOLD,
     DEFAULT_MAX_BATCH_SIZE,
     DEFAULT_NER_MODEL_VERSION,
     DEFAULT_NORMALIZATION_ENABLED,
     DEFAULT_PIPELINE_VERSION,
     DEFAULT_RULES_VERSION,
     DEFAULT_UNIT_CONVERSION_ENABLED,
+    DEFAULT_VECTOR_BACKEND,
+    DEFAULT_VECTOR_K,
     DEFAULT_VOCAB_VERSION,
     MAX_CONFIDENCE,
     MIN_BATCH_SIZE,
@@ -60,6 +66,12 @@ class Settings(BaseSettings):
     normalization_enabled: bool = DEFAULT_NORMALIZATION_ENABLED
     unit_conversion_enabled: bool = DEFAULT_UNIT_CONVERSION_ENABLED
     enum_strict: bool = DEFAULT_ENUM_STRICT
+
+    # Резолв поля (векторный матч).
+    vector_backend: Literal["auto", "embedding", "lexical"] = DEFAULT_VECTOR_BACKEND
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    match_threshold: float = Field(DEFAULT_MATCH_THRESHOLD, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE)
+    vector_k: int = Field(DEFAULT_VECTOR_K, ge=1)
 
     @model_validator(mode="after")
     def _validate_threshold_order(self) -> "Settings":

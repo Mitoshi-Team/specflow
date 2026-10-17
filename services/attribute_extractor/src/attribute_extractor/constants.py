@@ -266,8 +266,20 @@ DEFAULT_NER_MODEL_PATH = "models/ner"
 DEFAULT_VECTOR_K = 5
 """Число ближайших кандидатов при поиске в VectorIndex."""
 
-DEFAULT_VECTOR_BACKEND = "auto"
-"""Режим работы VectorIndex (auto/embedding/lexical)."""
+VECTOR_BACKEND_AUTO = "auto"
+"""Режим VectorIndex: выбрать семантический индекс, при недоступности — лексический."""
+
+VECTOR_BACKEND_EMBEDDING = "embedding"
+"""Режим VectorIndex: только семантический индекс (с fallback при недоступности)."""
+
+VECTOR_BACKEND_LEXICAL = "lexical"
+"""Режим VectorIndex: только лексический индекс (без моделей)."""
+
+DEFAULT_VECTOR_BACKEND = VECTOR_BACKEND_AUTO
+"""Режим работы VectorIndex по умолчанию."""
+
+DEFAULT_EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+"""Модель sentence-transformers для семантического матча имён полей."""
 
 DEFAULT_VECTOR_DIM = 512
 """Размерность лексического (hashed bag-of-words) индекса."""

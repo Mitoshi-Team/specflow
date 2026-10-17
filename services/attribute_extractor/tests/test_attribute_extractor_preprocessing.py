@@ -75,6 +75,44 @@ def test_normalize_empty() -> None:
     assert normalize_text("   \n\t ") == ""
 
 
+def test_normalize_strips_html_tags() -> None:
+    """Инлайновые HTML-теги снимаются, содержимое сохраняется."""
+    assert normalize_text("Кофемашина <b>De'Longhi</b> Magnifica") == (
+        "Кофемашина De'Longhi Magnifica"
+    )
+
+
+def test_normalize_replaces_block_tags_with_space() -> None:
+    """Теги-разделители дают пробел, чтобы слова не склеивались."""
+    assert normalize_text("Экран<br>6.7 дюйма") == "Экран 6.7 дюйма"
+    assert normalize_text("<p>Цвет: чёрный</p><p>Материал: дуб</p>") == "Цвет: чёрный Материал: дуб"
+
+
+def test_normalize_strips_self_closing_comment_and_doctype() -> None:
+    """Самозакрывающиеся теги, комментарии и doctype удаляются."""
+    text = '<!DOCTYPE html><!-- шаблон --><img src="x.png" /><span>Холодильник</span>'
+    assert normalize_text(text) == "Холодильник"
+
+
+def test_normalize_keeps_text_that_looks_like_comparison() -> None:
+    """Символьные сравнения без буквы после ``<`` не считаются разметкой."""
+    assert normalize_text("Напряжение 5 < 7 В") == "Напряжение 5 < 7 В"
+    assert normalize_text("Фильтр a < b > c подходит") == "Фильтр a < b > c подходит"
+
+
+def test_normalize_unescapes_html_entities() -> None:
+    """HTML-сущности декодируются, включая экранированную разметку."""
+    assert normalize_text("Кофе &amp; чай&nbsp;100%") == "Кофе & чай 100%"
+    assert normalize_text("Цена &lt; 1000 ₽") == "Цена < 1000 ₽"
+    assert normalize_text("&lt;strong&gt;Блендер&lt;/strong&gt;") == "Блендер"
+
+
+def test_normalize_keeps_html_when_disabled() -> None:
+    """При remove_html_tags=False теги и сущности сохраняются."""
+    assert normalize_text("Экран<br>6.7", remove_html_tags=False) == "Экран<br>6.7"
+    assert normalize_text("Кофе &amp; чай", remove_html_tags=False) == "Кофе &amp; чай"
+
+
 def test_tokenize_splits_on_whitespace() -> None:
     """Токенизация разбивает текст по пробелам."""
     assert tokenize("Ламинат 32 класс") == ["Ламинат", "32", "класс"]
@@ -197,3 +235,24 @@ def test_preprocessor_respects_remove_junk_flag() -> None:
     removed = CardPreprocessor().preprocess(card)
     assert kept.normalized_text == "Теле\u200bвизор"
     assert removed.normalized_text == "Телевизор"
+
+
+def test_preprocess_strips_html_from_title_and_description() -> None:
+    """Очистка снимает HTML из title/description, raw_text остаётся сырым."""
+    card = ProductCard(
+        title="<b>Ламинат</b> 32 класс",
+        description="Толщина<br>8 мм &amp; упаковка",
+    )
+    result = CardPreprocessor().preprocess(card)
+    assert result.raw_text == "<b>Ламинат</b> 32 класс Толщина<br>8 мм &amp; упаковка"
+    assert result.normalized_text == "Ламинат 32 класс Толщина 8 мм & упаковка"
+    assert result.tokens == ["Ламинат", "32", "класс", "Толщина", "8", "мм", "&", "упаковка"]
+
+
+def test_preprocessor_respects_remove_html_flag() -> None:
+    """Флаг remove_html_tags прокидывается в нормализацию."""
+    card = ProductCard(title="Экран<br>6.7 дюйма")
+    kept = CardPreprocessor(remove_html_tags=False).preprocess(card)
+    removed = CardPreprocessor().preprocess(card)
+    assert kept.normalized_text == "Экран<br>6.7 дюйма"
+    assert removed.normalized_text == "Экран 6.7 дюйма"

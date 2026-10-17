@@ -18,6 +18,7 @@ from attribute_extractor.preprocessing import (
     detect_language,
     generic_schema,
     normalize_text,
+    strip_service_noise,
     tokenize,
 )
 from specflow_contracts import Attribute, AttributeValueType, CategorySchema, ProductCard
@@ -117,6 +118,57 @@ def test_tokenize_splits_on_whitespace() -> None:
     """Токенизация разбивает текст по пробелам."""
     assert tokenize("Ламинат 32 класс") == ["Ламинат", "32", "класс"]
     assert tokenize("") == []
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "Подборки",
+        "Потратить бонусы",
+        "Гарантия предоставляется",
+        "ЗД для отчета BI/BO",
+        "Лучшие товары из Китая",
+    ],
+)
+def test_strip_service_noise_removes_standalone_insertion(phrase: str) -> None:
+    """Служебная вставка-фраза удаляется вместе со своим предложением."""
+    assert strip_service_noise(f"Смартфон Samsung. {phrase}.") == "Смартфон Samsung."
+
+
+def test_strip_service_noise_removes_seller_field_with_value() -> None:
+    """Метка «Продавец» вырезается вместе со значением до конца предложения."""
+    text = "Продавец: ИП Иванов. Смартфон Samsung."
+    assert strip_service_noise(text) == "Смартфон Samsung."
+
+
+def test_strip_service_noise_keeps_meaningful_sentence() -> None:
+    """Если после удаления фразы остаётся содержание, предложение сохраняется."""
+    assert strip_service_noise("Подборки диагоналей актуальны") == "диагоналей актуальны"
+
+
+def test_strip_service_noise_empty() -> None:
+    """Пустой ввод не меняется."""
+    assert strip_service_noise("") == ""
+
+
+def test_strip_service_noise_keeps_decimals_and_abbreviations() -> None:
+    """Десятичные точки и сокращения не разрываются при чистке."""
+    text = "Диагональ 6.7, доставка и т.д. Подборки."
+    assert strip_service_noise(text) == "Диагональ 6.7, доставка и т.д."
+
+
+def test_normalize_removes_service_noise_by_default() -> None:
+    """Нормализация по умолчанию удаляет служебные вставки и водяные знаки."""
+    raw = "Смартфон Samsung. Потратить бонусы. Гарантия предоставляется."
+    assert normalize_text(raw) == "Смартфон Samsung."
+
+
+def test_normalize_keeps_service_noise_when_disabled() -> None:
+    """При remove_service_noise=False служебные вставки сохраняются."""
+    raw = "Смартфон Samsung. Потратить бонусы."
+    assert normalize_text(raw, remove_service_noise=False) == (
+        "Смартфон Samsung. Потратить бонусы."
+    )
 
 
 @pytest.mark.parametrize(
@@ -256,3 +308,13 @@ def test_preprocessor_respects_remove_html_flag() -> None:
     removed = CardPreprocessor().preprocess(card)
     assert kept.normalized_text == "Экран<br>6.7 дюйма"
     assert removed.normalized_text == "Экран 6.7 дюйма"
+
+
+def test_preprocessor_respects_remove_service_noise_flag() -> None:
+    """Флаг remove_service_noise прокидывается в нормализацию, raw_text не меняется."""
+    card = ProductCard(title="Смартфон Samsung. Продавец: ИП Иванов. Потратить бонусы")
+    kept = CardPreprocessor(remove_service_noise=False).preprocess(card)
+    removed = CardPreprocessor().preprocess(card)
+    assert kept.normalized_text == "Смартфон Samsung. Продавец: ИП Иванов. Потратить бонусы"
+    assert removed.normalized_text == "Смартфон Samsung."
+    assert removed.raw_text == card.raw_text

@@ -36,6 +36,8 @@ from attribute_extractor.constants import (
     RULE_MEMORY_PATTERN,
     RULE_MEMORY_SLASH_PATTERN,
     RULE_MODEL_KEYWORD_PATTERN,
+    RULE_MODEL_NUMBER_DIGITS,
+    RULE_MODEL_STOPWORDS,
     RULE_PROCESSOR_KEYWORD_PATTERN,
     RULE_PROXIMITY_BLOCKED_TAIL_PATTERN,
     RULE_PROXIMITY_DEFAULT_UNITS,
@@ -83,6 +85,11 @@ _BLOCKED_TAIL_RE = re.compile(
     re.IGNORECASE,
 )
 _DIGIT_TAIL_RE = re.compile(rf"[\s{re.escape(RULE_PUNCTUATION_TRIM)}]*\d")
+# Одиночная мера/единица («Hz», «GB», «inch») из того же списка, что и хвосты
+# чужих мер у чисел: такой токен — характеристика, а не часть названия модели.
+_MODEL_MEASURE_RE = re.compile(
+    rf"(?<!\w)(?:{RULE_PROXIMITY_BLOCKED_TAIL_PATTERN})(?!\w)", re.IGNORECASE
+)
 
 
 def _keyword_res(words: tuple[str, ...]) -> tuple[re.Pattern[str], ...]:
@@ -263,6 +270,107 @@ def _keyword_value(text: str, keyword_re: re.Pattern[str]) -> str | None:
     return None
 
 
+def _build_model_stop_words() -> frozenset[str]:
+    """Стоп-слова модели после бренда: единицы, ключевые слова полей, цвета.
+
+    Словарь собирается из уже существующих констант правил, чтобы список
+    стоп-слов не расходился с ними («512GB», «IPS», «Black» — характеристика,
+    а не продолжение названия модели).
+    """
+    words = {word.casefold() for word in CANONICAL_UNIT_ALIASES}
+    words.update(canonical.casefold() for canonical in CANONICAL_UNIT_ALIASES.values())
+    for keywords in (
+        RULE_RAM_KEYWORDS,
+        RULE_DRIVE_KEYWORDS,
+        RULE_DIAGONAL_KEYWORDS,
+        RULE_BATTERY_KEYWORDS,
+        RULE_STORAGE_KEYWORDS,
+    ):
+        words.update(keyword.casefold() for keyword in keywords)
+    for canonical, synonyms in COLOR_SYNONYMS.items():
+        words.add(canonical.casefold())
+        words.update(synonym.casefold() for synonym in synonyms)
+    words.update(RULE_MODEL_STOPWORDS)
+    return frozenset(words)
+
+
+_MODEL_STOP_WORDS = _build_model_stop_words()
+
+
+def _is_model_stop_token(token: str) -> bool:
+    """Токен — единица/характеристика/цвет, а не часть названия модели.
+
+    Ведущие цифры снимаются: «512GB» → «gb», «165Hz» → «hz» — ёмкость или
+    частота в заголовке пишутся слитно с числом.
+    """
+    bare = token.casefold().lstrip("0123456789")
+    if not bare:
+        return False  # чистое число разбирается отдельным правилом
+    return bare in _MODEL_STOP_WORDS or bool(_MODEL_MEASURE_RE.fullmatch(bare))
+
+
+def _is_model_token(token: str) -> bool:
+    """Похож ли токен на продолжение названия модели (латиница и не характеристика)."""
+    if not token or not _VALUE_TOKEN_RE.fullmatch(token):
+        return False
+    return not _is_model_stop_token(token)
+
+
+def _following_token(tokens: list[str], index: int) -> str:
+    """Ближайший следующий значимый токен (без разделителей-пустышек)."""
+    for raw_token in tokens[index + 1 :]:
+        token = raw_token.strip(RULE_PUNCTUATION_TRIM)
+        if token:
+            return token
+    return ""
+
+
+def _model_value_after_brand(text: str, brand_match: re.Match[str]) -> str | None:
+    """Модель после бренда: латинско-цифровые токены до характеристики.
+
+    «Apple iPhone 13 Pro 256 ГБ» → «iPhone 13 Pro». Тот же сбор токенов, что
+    у ``_value_after_keyword`` (стоп по кириллице, лимит токенов, обязателна
+    латинская буква), плюс обрывы на характеристиках:
+
+    - токен-единица/технология/цвет («512GB», «IPS», «Black»);
+    - «голое» число ≥ ``RULE_MODEL_NUMBER_DIGITS`` цифр, за которым не следует
+      токен модели («128 ГБ» — ёмкость, но «250 G9» — номер модели);
+    - «голое» число после токена с цифрами («OLED55C4 55 4K» — это размер).
+
+    Компромисс: «RTX 4090» даст «GeForce RTX» — ёмкостям в заголовках
+    встречаемость выше (см. ``RULE_MODEL_NUMBER_DIGITS``).
+    """
+    tokens = text[brand_match.end() :].split()
+    collected: list[str] = []
+    previous_has_digit = False
+    for index, raw_token in enumerate(tokens):
+        token = raw_token.strip(RULE_PUNCTUATION_TRIM)
+        if not token:
+            continue
+        if not _VALUE_TOKEN_RE.fullmatch(token):
+            break
+        if _is_model_stop_token(token):
+            break
+        if token.isdigit() and (
+            previous_has_digit
+            or (
+                len(token) >= RULE_MODEL_NUMBER_DIGITS
+                and not _is_model_token(_following_token(tokens, index))
+            )
+        ):
+            break
+        collected.append(token)
+        previous_has_digit = any(char.isdigit() for char in token)
+        if len(collected) >= RULE_VALUE_TOKEN_LIMIT:
+            break
+        if raw_token[-1] in RULE_VALUE_BOUNDARY_PUNCT:
+            break
+    value = " ".join(collected)
+    if not value or not re.search(r"[A-Za-z]", value):
+        return None
+    return value
+
+
 def _covered_spans(text: str) -> list[tuple[int, int]]:
     """Отрезки, уже разобранные правилами единиц: их поле назначено и не меняется."""
     spans: list[tuple[int, int]] = []
@@ -371,6 +479,11 @@ class RuleExtractor(BaseExtractor):
         model = _keyword_value(text, _MODEL_RE)
         if model is not None:
             yield ("model", model, model, model)
+        else:
+            # Явный ключ «Модель:» приоритетнее модели после бренда: два разных
+            # значения одного кода создали бы ложный конфликт в мёрдже.
+            for brand_model in self._brand_model_values(text):
+                yield ("model", brand_model, brand_model, brand_model)
         processor = _keyword_value(text, _PROCESSOR_RE)
         if processor is not None:
             yield ("processor", processor, processor, processor)
@@ -521,6 +634,17 @@ class RuleExtractor(BaseExtractor):
                 continue
             evidence = match.group(0)
             yield ("color", evidence, canonical, evidence)
+
+    def _brand_model_values(self, text: str) -> Iterator[str]:
+        """Модель после каждого найденного бренда (словарь, границы слов)."""
+        if self._brand_re is None or self._brand_vocab is None:
+            return
+        for match in self._brand_re.finditer(text):
+            if self._brand_vocab.resolve(match.group(0)) is None:
+                continue  # стоп-слово словаря: бренда нет — и модели тоже
+            model = _model_value_after_brand(text, match)
+            if model is not None:
+                yield model
 
     def _brand_candidates(self, text: str) -> Iterator[tuple[str, str, str, str]]:
         """Бренд: границы слов по словарю брендов (без словаря не извлекается)."""

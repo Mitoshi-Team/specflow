@@ -575,6 +575,29 @@ CATEGORY_LIST_DEFAULT_LIMIT = 50
 
 CATEGORY_LIST_MAX_LIMIT = 200
 
+# --- Офлайн-прогон (scripts/run_batch.py) -----------------------------------
+
+RUN_BATCH_INPUT_SUFFIXES = (".csv", ".tsv", ".json", ".jsonl")
+"""Поддерживаемые расширения входного файла карточек."""
+
+RUN_BATCH_DEFAULT_BATCH_SIZE = 20
+"""Размер части потока по умолчанию (``--batch-size``)."""
+
+RUN_BATCH_MAX_BATCH_SIZE = 50
+"""Максимальный размер части потока (``--batch-size``)."""
+
+RUN_BATCH_MAX_INPUT_SIZE_MB = 100
+"""Максимальный размер входного файла в мегабайтах."""
+
+RUN_BATCH_JSONL_NAME = "predictions.jsonl"
+"""Имя выходного файла с сериализованными ``ExtractionResult``."""
+
+RUN_BATCH_CSV_NAME = "predictions.csv"
+"""Имя CSV-выгрузки в формате PredictionRow (domain-model.md, 3.7)."""
+
+RUN_BATCH_CSV_BASE_COLUMNS = ("product_id", "title", "category", "needs_review", "status")
+"""Колонки PredictionRow до пар «атрибут/уверенность» (порядок по frontend.md, 4)."""
+
 DEFAULT_FIELD_CATALOG_PATH = "data/field_catalog.json"
 """Путь к каталогу полей по умолчанию."""
 

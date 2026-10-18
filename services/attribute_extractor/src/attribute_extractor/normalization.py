@@ -47,13 +47,20 @@ def _basic_normalize(text: str) -> str:
     return normalized.strip()
 
 
-def _parse_number(text: str) -> float:
-    """Разобрать число с запятой или точкой в качестве разделителя."""
+def parse_number(text: str) -> float:
+    """Разобрать число с запятой или точкой в качестве разделителя.
+
+    Публичная функция: переиспользуется экстракторами (RuleExtractor) для
+    форматирования чисел в ``normalized_value``.
+    """
     return float(text.replace(",", "."))
 
 
-def _format_number(value: float) -> str:
-    """Отформатировать число: без лишних нулей, с каноническим разделителем."""
+def format_number(value: float) -> str:
+    """Отформатировать число: без лишних нулей, с каноническим разделителем.
+
+    Публичная функция: единый формат чисел для нормализации и правил.
+    """
     text = f"{value:.6f}".rstrip("0").rstrip(".")
     if text in ("", "-"):
         text = "0"
@@ -160,19 +167,19 @@ class ValueNormalizer:
     def _normalize_number(value: str) -> str:
         """Нормализовать числовое значение к единому формату."""
         try:
-            number = _parse_number(value.replace(" ", ""))
+            number = parse_number(value.replace(" ", ""))
         except ValueError:
             return value
-        return _format_number(number)
+        return format_number(number)
 
     def _normalize_unit_value(self, value: str, attribute_code: str, unit: str | None) -> str:
         """Нормализовать значение «число + единица» и (опц.) сконвертировать единицу."""
         match = _NUMBER_RE.match(value)
         if match is None:
             return value
-        first = _parse_number(match.group("first"))
+        first = parse_number(match.group("first"))
         second = match.group("second")
-        secondary = _parse_number(second) if second is not None else None
+        secondary = parse_number(second) if second is not None else None
         canonical_unit = _canonical_unit(match.group("unit").strip())
 
         if self._unit_conversion_enabled and unit and canonical_unit and canonical_unit != unit:
@@ -186,5 +193,5 @@ class ValueNormalizer:
 
         suffix = f" {canonical_unit}" if canonical_unit else ""
         if secondary is not None:
-            return f"{_format_number(first)}-{_format_number(secondary)}{suffix}"
-        return f"{_format_number(first)}{suffix}"
+            return f"{format_number(first)}-{format_number(secondary)}{suffix}"
+        return f"{format_number(first)}{suffix}"

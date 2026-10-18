@@ -49,17 +49,12 @@ def test_base_extractor_is_abstract() -> None:
         BaseExtractor()  # type: ignore[abstract]
 
 
-@pytest.mark.parametrize(
-    "extractor_cls",
-    [
-        RuleExtractor,
-        NERExtractor,
-    ],
-)
-def test_skeleton_extractors_return_empty(extractor_cls) -> None:
-    """Скелетные экстракторы возвращают пустой список кандидатов."""
-    extractor = extractor_cls()
-    candidates = extractor.extract(_make_card(), _make_schema())
+def test_skeleton_ner_extractor_returns_empty() -> None:
+    """Скелетный NER-экстрактор возвращает пустой список кандидатов.
+
+    RuleExtractor более не скелет — его поведение покрыто test_attribute_extractor_rule.py.
+    """
+    candidates = NERExtractor().extract(_make_card(), _make_schema())
     assert candidates == []
 
 

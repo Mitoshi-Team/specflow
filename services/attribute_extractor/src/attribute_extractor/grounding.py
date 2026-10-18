@@ -39,6 +39,23 @@ _HTML_TAG_RE = re.compile(HTML_TAG_PATTERN)
 _WHITESPACE_RE = re.compile(WHITESPACE_PATTERN)
 
 
+def locate_span(needle: str, field: SpanField, original: str) -> Span | None:
+    """Найти точные позиции ``needle`` в оригинальном тексте (без учёта регистра).
+
+    Публичная функция: переиспользуется экстракторами (RuleExtractor) для
+    привязки найденного значения к исходным offset'ам карточки.
+    """
+    index = original.lower().find(needle.lower())
+    if index < 0:
+        return None
+    return Span(
+        field=field,
+        text=original[index : index + len(needle)],
+        start=index,
+        end=index + len(needle),
+    )
+
+
 def _build_unit_re() -> re.Pattern[str]:
     """Собрать регулярное выражение для замены синонимов единиц измерения.
 
@@ -150,14 +167,14 @@ class GroundingValidator:
             if evidence_canonical:
                 for field, original, canonical, _ in fields:
                     if evidence_canonical in canonical:
-                        return self._locate_span(evidence, field, original) or Span(
+                        return locate_span(evidence, field, original) or Span(
                             field=field, text=evidence
                         )
             evidence_normalized = normalize_text(evidence).lower()
             if evidence_normalized:
                 for field, original, _, normalized in fields:
                     if evidence_normalized in normalized:
-                        return self._locate_span(evidence, field, original) or Span(
+                        return locate_span(evidence, field, original) or Span(
                             field=field, text=evidence
                         )
         value = candidate.normalized_value or candidate.raw_value
@@ -169,16 +186,3 @@ class GroundingValidator:
             ):
                 return Span(field=field, text=value)
         return None
-
-    @staticmethod
-    def _locate_span(needle: str, field: SpanField, original: str) -> Span | None:
-        """Найти точные позиции ``needle`` в оригинальном тексте (без учёта регистра)."""
-        index = original.lower().find(needle.lower())
-        if index < 0:
-            return None
-        return Span(
-            field=field,
-            text=original[index : index + len(needle)],
-            start=index,
-            end=index + len(needle),
-        )

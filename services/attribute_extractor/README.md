@@ -171,7 +171,7 @@ class ConfidenceConfig:
 ```python
 def clean(card: ProductCard) -> CleanedCard                                    # 🎯 (сейчас CardPreprocessor.preprocess)
 def resolve_schema(card: ProductCard, registry: SchemaRegistry) -> CategorySchema  # ✅ SchemaRegistry.resolve
-def extract_rules(card: CleanedCard, schema: CategorySchema) -> list[AttributeCandidate]       # 🚧 RuleExtractor.extract
+def extract_rules(card: CleanedCard, schema: CategorySchema) -> list[AttributeCandidate]       # ✅ RuleExtractor.extract
 def normalize_value(raw: str, field: FieldCatalogEntry | None) -> NormalizedValue              # ✅ ValueNormalizer.normalize
 def rules_fallback(card: CleanedCard, schema: CategorySchema, missing: set[str]) -> list[AttributeCandidate]  # 🎯
 def merge(candidates: list[AttributeCandidate]) -> list[AttributeCandidate]    # ✅ CandidateMerger.merge
@@ -286,7 +286,7 @@ seller-атрибутах и недостижимые из текста, иск�
   очистка не меняет числа и единицы, иначе `ValueError`), язык, токенизация,
   резолв `CategorySchema`.
 - `src/attribute_extractor/extractors/` — `BaseExtractor`, `ExtractorRegistry`,
-  `RuleExtractor` (🚧), `NERExtractor` (пейринг + `ner_score`).
+  `RuleExtractor` (✅), `NERExtractor` (пейринг + `ner_score`).
 - `src/attribute_extractor/vector_index.py` — `VectorIndex` (Protocol) и
   `LexicalVectorIndex`/`InMemoryVectorIndex` (graceful degradation).
 - `src/attribute_extractor/fields.py` — `FieldCatalog`, `FieldBlocklist`,

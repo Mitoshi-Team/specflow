@@ -54,10 +54,21 @@ def test_diagonal_word_unit() -> None:
 
 
 def test_diagonal_inch_symbol() -> None:
-    """Дюймовый символ после числа — диагональ («27"»)."""
+    """Дюймовый символ после числа — диагональ («27\"»)."""
     card = ProductCard(title='Монитор 27" IPS 2560x1440')
     candidate = _by_code(_extract(card))["diagonal"]
     assert candidate.normalized_value == "27 дюйм"
+
+
+@pytest.mark.parametrize(
+    "fragment",
+    ['Экран 6.7 inch', 'Экран 6.7″', 'Экран 6.7"'],
+)
+def test_diagonal_english_and_prime_symbols(fragment: str) -> None:
+    """Единицы inch/″/" из спеки дают канон «6,7 дюйм»."""
+    card = ProductCard(description=fragment)
+    candidate = _by_code(_extract(card))["diagonal"]
+    assert candidate.normalized_value == "6,7 дюйм"
 
 
 def test_diagonal_hyphenated_form() -> None:
@@ -74,10 +85,10 @@ def test_diagonal_hyphenated_form() -> None:
 
 @pytest.mark.parametrize(
     "fragment",
-    ["Батарея 5000 мА·ч", "Батарея 5000 мАч", "Батарея 5000mAh"],
+    ["Батарея 5000 мА·ч", "Батарея 5000 мАч", "Батарея 5000mAh", "Батарея 5000 мА*ч"],
 )
 def test_battery_capacity_forms(fragment: str) -> None:
-    """Все написания единицы (мА·ч/мАч/mAh) дают канон «5000 мА·ч»."""
+    """Все написания единицы (мА·ч/мА*ч/мАч/mAh) дают канон «5000 мА·ч»."""
     card = ProductCard(description=fragment)
     candidate = _by_code(_extract(card))["battery_capacity"]
     assert candidate.normalized_value == "5000 мА·ч"

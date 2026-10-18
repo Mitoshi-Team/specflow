@@ -11,11 +11,17 @@ import json
 from pathlib import Path as FsPath
 
 from attribute_extractor.config import Settings
-from attribute_extractor.constants import DEFAULT_DETERMINISTIC_CONFIDENCE
+from attribute_extractor.constants import (
+    DEFAULT_DETERMINISTIC_CONFIDENCE,
+    REVIEW_THRESHOLD,
+    RULE_EXTRACTOR_NAME,
+)
 from attribute_extractor.extractors.base import BaseExtractor
 from attribute_extractor.extractors.ner import NER_EXTRACTOR_NAME
+from attribute_extractor.normalization import ValueNormalizer
 from attribute_extractor.pipeline import ExtractPipeline
 from attribute_extractor.preprocessing import CardPreprocessor, SchemaRegistry
+from attribute_extractor.references import AttributeVocab, ReferenceCatalog
 from specflow_contracts import (
     Attribute,
     AttributeCandidate,
@@ -250,3 +256,97 @@ def test_required_missing_marks_partial() -> None:
     result = pipeline.extract(card)
     assert result.status == ExtractionStatus.PARTIAL
     assert result.needs_review is True
+
+
+def _enum_schema_registry(category: str = "Смартфоны") -> SchemaRegistry:
+    """Схема с единственным обязательным enum-атрибутом (color)."""
+    from attribute_extractor.preprocessing import generic_schema
+
+    schema = generic_schema().model_copy(
+        update={
+            "category": category,
+            "required_attributes": [
+                Attribute(code="color", value_type=AttributeValueType.ENUM, is_required=True),
+            ],
+        }
+    )
+    return SchemaRegistry([schema])
+
+
+class _StubColorRule(BaseExtractor):
+    """FAKE rule-экстрактор: цвет из заголовка, значение отсутствует в vocab."""
+
+    name = RULE_EXTRACTOR_NAME
+    priority = 0
+
+    def extract(self, card: ProductCard, schema) -> list[AttributeCandidate]:
+        return [
+            AttributeCandidate(
+                attribute_code="color",
+                raw_value="красный",
+                normalized_value="красный",
+                confidence=DEFAULT_DETERMINISTIC_CONFIDENCE,
+                extraction_method=ExtractionMethod.RULE,
+                is_confirmed_in_text=True,
+                evidence_text="красный",
+            )
+        ]
+
+
+def test_enum_out_of_vocab_marks_card_low_confidence() -> None:
+    """Enum вне vocab → confidence ниже AUTO → карточка в ``low_confidence``.
+
+    Этап 6 (неуспех маппинга через synonyms_map) вкупе с порогами Этапа 10:
+    кандидат остаётся в результате с ``REVIEW_THRESHOLD``, карточка получает
+    ``needs_review=true`` и статус ``low_confidence``.
+    """
+    from attribute_extractor.extractors import ExtractorRegistry
+
+    catalog = ReferenceCatalog()
+    catalog.register_attribute_vocab(
+        AttributeVocab(attribute_code="color", canonical_values=["Чёрный"])
+    )
+    pipeline = ExtractPipeline(
+        settings=Settings(),
+        registry=ExtractorRegistry([_StubColorRule()]),
+        preprocessor=CardPreprocessor(schemas=_enum_schema_registry()),
+        normalizer=ValueNormalizer(catalog),
+    )
+    card = ProductCard(
+        product_id="p-enum", title="Смартфон цвет красный", category_name="Смартфоны"
+    )
+    result = pipeline.extract(card)
+
+    assert [candidate.attribute_code for candidate in result.attributes] == ["color"]
+    color = result.attributes[0]
+    assert color.normalized_value == "красный"
+    assert color.confidence == REVIEW_THRESHOLD
+    assert result.low_confidence_count == 1
+    assert result.needs_review is True
+    assert result.status == ExtractionStatus.LOW_CONFIDENCE
+
+
+def test_enum_in_vocab_keeps_card_ok() -> None:
+    """Enum-значение из vocab не снижает уверенность — карточка ``ok``."""
+    from attribute_extractor.extractors import ExtractorRegistry
+
+    catalog = ReferenceCatalog()
+    catalog.register_attribute_vocab(
+        AttributeVocab(attribute_code="color", canonical_values=["Красный"])
+    )
+    pipeline = ExtractPipeline(
+        settings=Settings(),
+        registry=ExtractorRegistry([_StubColorRule()]),
+        preprocessor=CardPreprocessor(schemas=_enum_schema_registry()),
+        normalizer=ValueNormalizer(catalog),
+    )
+    card = ProductCard(
+        product_id="p-enum-ok", title="Смартфон цвет красный", category_name="Смартфоны"
+    )
+    result = pipeline.extract(card)
+
+    color = result.attributes[0]
+    assert color.normalized_value == "Красный"
+    assert color.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
+    assert result.low_confidence_count == 0
+    assert result.status == ExtractionStatus.OK

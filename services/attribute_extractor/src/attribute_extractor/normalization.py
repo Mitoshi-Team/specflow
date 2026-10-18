@@ -6,9 +6,10 @@
 единиц измерения, форматирование чисел и валидация enum по ``vocab``.
 
 Справочники передаются через :class:`ReferenceCatalog`. Если enum-значение не
-сопоставлено со словарём: при ``enum_strict=true`` кандидат отбрасывается
-(возвращается ``None``), иначе помечается признаком ``enum_out_of_vocab`` (штраф
-применяется на этапе скоринга, Этап 7).
+сопоставлено со словарём (попытка маппинга через ``synonyms_map`` не удалась):
+при ``enum_strict=true`` кандидат отбрасывается (возвращается ``None``), иначе
+уверенность кандидата ограничивается ``REVIEW_THRESHOLD`` — по порогам Этапа 10
+такой кандидат попадает в статус ``low_confidence`` (спека, Этап 6).
 """
 
 from __future__ import annotations
@@ -20,8 +21,8 @@ from attribute_extractor.constants import (
     DASH_NORMALIZATION,
     DECIMAL_SEPARATOR,
     DEFAULT_UNIT_CONVERSION_ENABLED,
-    ENUM_OUT_OF_VOCAB_FEATURE_KEY,
     NUMBER_WITH_UNIT_PATTERN,
+    REVIEW_THRESHOLD,
 )
 from attribute_extractor.preprocessing import normalize_text
 from attribute_extractor.references import (
@@ -101,7 +102,9 @@ class ValueNormalizer:
         """Нормализовать значение кандидата.
 
         Возвращает обновлённого кандидата или ``None``, если значение отброшено
-        (enum вне словаря при ``enum_strict=true``).
+        (enum вне словаря при ``enum_strict=true``). При неуспехе маппинга
+        enum-значения уверенность кандидата ограничивается ``REVIEW_THRESHOLD`` —
+        по порогам Этапа 10 он получает статус ``low_confidence``.
         """
         source = candidate.normalized_value or candidate.raw_value
         value = _basic_normalize(source)
@@ -126,12 +129,14 @@ class ValueNormalizer:
         else:
             value = self._normalize_text_value(value, vocab)
 
-        features = dict(candidate.features or {})
+        update: dict[str, object] = {"normalized_value": value}
         if out_of_vocab:
-            features[ENUM_OUT_OF_VOCAB_FEATURE_KEY] = True
-        return candidate.model_copy(
-            update={"normalized_value": value, "features": features or None}
-        )
+            # Этап 6: маппинг не удался → значение остаётся как есть, а
+            # уверенность опускается в полосу low_confidence порогов Этапа 10
+            # (REVIEW_THRESHOLD <= confidence < AUTO_THRESHOLD → low_confidence).
+            # Уже низкая уверенность не повышается — min сохраняет её.
+            update["confidence"] = min(candidate.confidence, REVIEW_THRESHOLD)
+        return candidate.model_copy(update=update)
 
     def normalize_all(
         self, candidates: list[AttributeCandidate], schema: CategorySchema | None = None

@@ -234,3 +234,55 @@ def test_conflict_preserves_tracing_fields_of_best_candidate() -> None:
     assert result[0].ner_score == pytest.approx(0.9)
     assert result[0].match_score == pytest.approx(0.7)
     assert result[0].is_new_field is True
+
+
+def test_conflict_excludes_spans_of_losing_value() -> None:
+    """Спаны кандидатов с проигравшим значением не попадают в результат."""
+    winner_span = Span(field=SpanField.TITLE, text="black", start=0, end=5)
+    loser_span = Span(field=SpanField.DESCRIPTION, text="white", start=10, end=15)
+    result = CandidateMerger().merge(
+        [
+            _candidate("black", confidence=0.9, spans=[winner_span]),
+            _candidate("white", confidence=0.5, spans=[loser_span]),
+        ]
+    )
+    assert result[0].source_spans == [winner_span]
+
+
+def test_conflict_excludes_features_of_losing_value() -> None:
+    """Features кандидатов с проигравшим значением не попадают в результат."""
+    result = CandidateMerger().merge(
+        [
+            _candidate("black", confidence=0.9),
+            _candidate("white", confidence=0.5, features={"source": "ner"}),
+        ]
+    )
+    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+
+
+def test_conflict_merges_spans_of_winning_value_duplicates() -> None:
+    """Дубли одного значения внутри конфликтной группы сливаются по-прежнему."""
+    span_a = Span(field=SpanField.TITLE, text="black", start=0, end=5)
+    span_b = Span(field=SpanField.DESCRIPTION, text="black", start=20, end=25)
+    loser_span = Span(field=SpanField.TITLE, text="white", start=30, end=35)
+    result = CandidateMerger().merge(
+        [
+            _candidate("black", confidence=0.9, spans=[span_a]),
+            _candidate("black", confidence=0.7, spans=[span_b]),
+            _candidate("white", confidence=0.5, spans=[loser_span]),
+        ]
+    )
+    assert result[0].source_spans == [span_a, span_b]
+    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+
+
+def test_conflict_confirmed_flag_counts_only_winning_value() -> None:
+    """Подтверждение учитывается только среди кандидатов с победившим значением."""
+    result = CandidateMerger().merge(
+        [
+            _candidate("black", confidence=0.9, confirmed=False),
+            _candidate("white", confidence=0.5, confirmed=True),
+        ]
+    )
+    assert result[0].is_confirmed_in_text is False
+    assert result[0].features == {CONFLICT_FEATURE_KEY: True}

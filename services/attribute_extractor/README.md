@@ -214,16 +214,21 @@ in-memory/lexical) не фиксируется. `resolve_field` возвраща
 
 ### 3.5 Точки конфигурации пайплайна
 
-Оркестратор собирается из перечисленных функций, поэтому подгонка под тестовые
-данные — это подмена реализации/порядка, без правки компонентов:
+Оркестратор `ExtractPipeline` (`pipeline.py`) — сборка каскада Этапов
+0–11: clean + schema → rules/NER → нормализация → merge → grounding →
+уверенность/статус → `ExtractionResult`. Подгонка под тестовые данные —
+это подмена реализации/порядка, без правки компонентов:
 
-- **Включение/выключение этапов:** NER и векторный матч — опциональны (graceful
-  degradation до rules).
+- **Тумблеры этапов** (env `EXTRACTOR_ENABLE_*`): `enable_rules`,
+  `enable_ner`, `enable_vector_match`, `enable_rules_fallback`.
 - **Пороги:** `MATCH_THRESHOLD`, `AUTO_THRESHOLD`, `REVIEW_THRESHOLD`,
   `DETERMINISTIC_CONFIDENCE` — через `ConfidenceConfig`/Pydantic Settings.
 - **Реализации:** `VectorIndex`, NER-модель, блоклист, каталог — инъекция (DI).
 - **Пространство реестров:** `ExtractorRegistry` (порядок по `priority`),
   `SchemaRegistry`.
+- **Graceful degradation:** NER без модели и векторный индекс не прерывают
+  пайплайн — работает полный rule-путь; NER-путь после себя руками fallback
+  (Этап 7) дополняет только незакрытые обязательные поля схемы.
 
 ## 4. Gold-набор (владелец: Матвей)
 

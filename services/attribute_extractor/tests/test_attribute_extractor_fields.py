@@ -2,8 +2,18 @@
 
 from __future__ import annotations
 
-from attribute_extractor import fields, vector_index
+from attribute_extractor import fields, slugify, vector_index
 from attribute_extractor.catalog_store import CatalogStore
+
+
+def test_slugify_transliterates_cyrillic():
+    assert slugify.slugify("Бренд смартфона") == "brend_smartfona"
+    assert slugify.slugify("Пиковая частота видеокарты") == "pikovaya_chastota_videokarty"
+
+
+def test_slugify_fallback_for_symbols_only():
+    assert slugify.slugify("###") == "field"
+    assert slugify.slugify("") == "field"
 
 
 def _store(tmp_path, entries=None, blocklist=None) -> CatalogStore:

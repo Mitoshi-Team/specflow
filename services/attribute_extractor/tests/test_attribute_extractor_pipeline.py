@@ -1,0 +1,187 @@
+"""Интеграционные тесты оркестратора ExtractPipeline (Этапы 0–11).
+
+Реальные карточки грузятся из gold.jsonl; тумблеры, graceful degradation
+(NER без модели), rules-fallback (Этап 7) и формирование статуса проверяются
+на устойчивых ожиданиях (структурные, а не на метрики качества правил).
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path as FsPath
+
+from attribute_extractor.config import Settings
+from attribute_extractor.extractors.base import BaseExtractor
+from attribute_extractor.extractors.ner import NER_EXTRACTOR_NAME
+from attribute_extractor.pipeline import ExtractPipeline
+from attribute_extractor.preprocessing import CardPreprocessor, SchemaRegistry
+from specflow_contracts import (
+    Attribute,
+    AttributeCandidate,
+    AttributeValueType,
+    ExtractionMethod,
+    ExtractionStatus,
+    ProductCard,
+    Span,
+    SpanField,
+)
+
+GOLD_PATH = FsPath(__file__).resolve().parents[1] / "gold" / "gold.jsonl"
+
+RECORD_1 = json.loads(GOLD_PATH.read_text(encoding="utf-8").splitlines()[0])
+
+
+def _card_from_gold(record: dict) -> ProductCard:
+    data = record["card"]
+    return ProductCard(
+        product_id=data["sku_id"],
+        title=data["title"],
+        description=data["description"],
+        category_id=data["category_id"],
+        category_name=data["category_name"],
+    )
+
+
+def _default_pipeline(**overrides) -> ExtractPipeline:
+    return ExtractPipeline(settings=Settings(**overrides))
+
+
+def test_gold_card_extract_updates_rule_candidates() -> None:
+    card = _card_from_gold(RECORD_1)
+    result = _default_pipeline().extract(card)
+
+    by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
+    codes = {candidate.attribute_code for candidate in result.attributes}
+    assert {"brand", "storage", "ram", "color"} <= codes
+    assert by_code["brand"].normalized_value == "realme"
+    brand = by_code["brand"]
+    assert brand.extraction_method == ExtractionMethod.RULE
+    assert brand.is_confirmed_in_text is True
+    assert brand.confidence == 0.9
+    assert len(brand.source_spans) >= 1
+    assert all(
+        span.field in (SpanField.TITLE, SpanField.DESCRIPTION) for span in brand.source_spans
+    )
+    assert result.pipeline_version == "0.1.0"
+    assert result.processing_time_ms >= 0
+    assert result.low_confidence_count >= 0
+    assert result.status in (ExtractionStatus.OK, ExtractionStatus.LOW_CONFIDENCE)
+    codes_sorted = [candidate.attribute_code for candidate in result.attributes]
+    assert codes_sorted == sorted(codes_sorted)
+    assert result.product_id == card.product_id
+
+
+def test_empty_card_is_skipped() -> None:
+    card = ProductCard(title=None, description=None, seller_attributes={"Цвет": "черный"})
+    result = _default_pipeline().extract(card)
+    assert result.status == ExtractionStatus.SKIPPED
+    assert result.attributes == []
+    assert result.needs_review is False
+
+
+def test_disabled_rules_yields_no_candidates() -> None:
+    card = _card_from_gold(RECORD_1)
+    result = _default_pipeline(enable_rules=False, enable_ner=False).extract(card)
+    assert result.attributes == []
+    assert result.status in (ExtractionStatus.OK, ExtractionStatus.PARTIAL)
+
+
+def test_unavailable_ner_gracefully_degrades_to_rules() -> None:
+    card = _card_from_gold(RECORD_1)
+    result = _default_pipeline(enable_ner=True).extract(card)
+    by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
+    assert by_code["brand"].extraction_method == ExtractionMethod.RULE
+
+
+def _required_schema_registry(category: str = "Смартфоны") -> SchemaRegistry:
+    from attribute_extractor.preprocessing import generic_schema
+
+    schema = generic_schema().model_copy(
+        update={
+            "category": category,
+            "required_attributes": [
+                Attribute(code="brand", value_type=AttributeValueType.STRING, is_required=True),
+                Attribute(
+                    code="storage",
+                    value_type=AttributeValueType.UNIT_VALUE,
+                    is_required=True,
+                    unit="ГБ",
+                ),
+            ],
+        }
+    )
+    return SchemaRegistry([schema])
+
+
+class _StubNER(BaseExtractor):
+    """FAKE NER: доступен, извлекает бренд; совпадает с именем NER-экстрактора."""
+
+    name = NER_EXTRACTOR_NAME
+    priority = 10
+
+    def is_available(self) -> bool:
+        return True
+
+    def extract(self, card: ProductCard, schema) -> list[AttributeCandidate]:
+        span = Span(field=SpanField.TITLE, text="realme", start=9, end=15)
+        return [
+            AttributeCandidate(
+                attribute_code="brand",
+                raw_value="realme",
+                normalized_value="realme",
+                confidence=0.95,
+                extraction_method=ExtractionMethod.NER,
+                is_confirmed_in_text=True,
+                source_spans=[span],
+                evidence_text="realme",
+                ner_score=0.95,
+            )
+        ]
+
+
+def test_ner_candidate_with_rules_fallback_fills_missing_required() -> None:
+    registry_required = _required_schema_registry()
+    card = _card_from_gold(RECORD_1)
+    settings = Settings(normalization_enabled=False)
+    pipeline = ExtractPipeline(
+        settings=settings,
+        registry=_registry_with_stub(),
+        preprocessor=CardPreprocessor(schemas=registry_required),
+        normalizer=None,
+    )
+    result = pipeline.extract(card)
+
+    by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
+    assert by_code["brand"].extraction_method == ExtractionMethod.NER
+    assert by_code["brand"].confidence == 0.95
+    assert by_code["brand"].ner_score == 0.95
+    assert by_code["storage"].extraction_method == ExtractionMethod.RULE
+    storage = by_code["storage"].normalized_value
+    assert storage.endswith("ГБ")
+    codes = {candidate.attribute_code for candidate in result.attributes}
+    assert codes == {"brand", "storage"}
+    assert result.status == ExtractionStatus.OK
+
+
+def _registry_with_stub():
+    from attribute_extractor.extractors import ExtractorRegistry
+    from attribute_extractor.extractors.rule import RuleExtractor
+
+    return ExtractorRegistry([RuleExtractor(), _StubNER()])
+
+
+def test_required_missing_marks_partial() -> None:
+    card = ProductCard(
+        product_id="p2",
+        title="Ноутбук без брендов моделей памяти 30 кадров",
+        description="Пора перекусить яблоком в 11 часов.",
+        category_id="cat",
+        category_name="Ноутбуки",
+    )
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        preprocessor=CardPreprocessor(schemas=_required_schema_registry("Ноутбуки")),
+    )
+    result = pipeline.extract(card)
+    assert result.status == ExtractionStatus.PARTIAL
+    assert result.needs_review is True

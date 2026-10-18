@@ -435,6 +435,18 @@ AUTO_THRESHOLD = DEFAULT_CONFIDENCE_THRESHOLD
 REVIEW_THRESHOLD = REVIEW_CONFIDENCE_THRESHOLD
 """Порог ручной проверки."""
 
+DEFAULT_ENABLE_RULES = True
+"""Тумблер rule-пути (Этап 3/7) в оркестраторе."""
+
+DEFAULT_ENABLE_NER = True
+"""Тумблер NER-пути (Этап 4) в оркестраторе."""
+
+DEFAULT_ENABLE_VECTOR_MATCH = True
+"""Тумблер векторного резолва полей (Этап 5) в оркестраторе."""
+
+DEFAULT_ENABLE_RULES_FALLBACK = True
+"""Тумблер rules-fallback после NER (Этап 7) в оркестраторе."""
+
 DEFAULT_BRAND_VOCAB_PATH = "services/attribute_extractor/assets/brand_vocab.json"
 
 DEFAULT_FIELD_CATALOG_PATH = "data/field_catalog.json"

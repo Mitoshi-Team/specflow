@@ -22,21 +22,30 @@ from attribute_extractor.constants import (
     COLOR_SYNONYMS,
     DEFAULT_DETERMINISTIC_CONFIDENCE,
     RULE_ADJACENT_MEMORY_TOKEN_GAP,
+    RULE_BATTERY_KEYWORDS,
     RULE_BATTERY_PATTERN,
     RULE_COLOR_TEMPLATE_PATTERN,
+    RULE_DIAGONAL_KEYWORDS,
     RULE_DIAGONAL_PATTERN,
     RULE_DRIVE_KEYWORDS,
     RULE_EXTRACTOR_NAME,
     RULE_EXTRACTOR_PRIORITY,
+    RULE_KEY_PHRASE_TOKEN_GAP,
     RULE_KEYWORD_WINDOW,
     RULE_MEMORY_DEFAULT_CODE,
     RULE_MEMORY_PATTERN,
     RULE_MEMORY_SLASH_PATTERN,
     RULE_MODEL_KEYWORD_PATTERN,
     RULE_PROCESSOR_KEYWORD_PATTERN,
+    RULE_PROXIMITY_BLOCKED_TAIL_PATTERN,
+    RULE_PROXIMITY_DEFAULT_UNITS,
+    RULE_PROXIMITY_NUMBER_PATTERN,
+    RULE_PROXIMITY_VALUE_RANGES,
     RULE_PUNCTUATION_TRIM,
     RULE_RAM_KEYWORDS,
     RULE_RANGE_PREFIX_PATTERN,
+    RULE_RANGE_SUFFIX_PATTERN,
+    RULE_STORAGE_KEYWORDS,
     RULE_VALUE_BOUNDARY_PUNCT,
     RULE_VALUE_TOKEN_LIMIT,
     RULE_VALUE_TOKEN_PATTERN,
@@ -64,9 +73,42 @@ _MODEL_RE = re.compile(RULE_MODEL_KEYWORD_PATTERN, re.IGNORECASE)
 _PROCESSOR_RE = re.compile(RULE_PROCESSOR_KEYWORD_PATTERN, re.IGNORECASE)
 _VALUE_TOKEN_RE = re.compile(RULE_VALUE_TOKEN_PATTERN)
 _RANGE_PREFIX_RE = re.compile(RULE_RANGE_PREFIX_PATTERN)
+_RANGE_SUFFIX_RE = re.compile(RULE_RANGE_SUFFIX_PATTERN)
+_PROXIMITY_NUMBER_RE = re.compile(RULE_PROXIMITY_NUMBER_PATTERN)
+_TOKEN_RE = re.compile(r"\S+")
+# Хвост значения: разделители, затем чужая мера («80 см», «60 Гц») или цифра
+# соотношения («16:9») — такие числа полю не являются.
+_BLOCKED_TAIL_RE = re.compile(
+    rf"[\s{re.escape(RULE_PUNCTUATION_TRIM)}]*(?<!\w)(?:{RULE_PROXIMITY_BLOCKED_TAIL_PATTERN})(?!\w)",
+    re.IGNORECASE,
+)
+_DIGIT_TAIL_RE = re.compile(rf"[\s{re.escape(RULE_PUNCTUATION_TRIM)}]*\d")
+
+
+def _keyword_res(words: tuple[str, ...]) -> tuple[re.Pattern[str], ...]:
+    """Regex ключевых слов с префиксным совпадением («оператив» → «оперативный»).
+
+    Ключевые слова применяются к casefold-тексту с ё→е, поэтому — строчные.
+    """
+    return tuple(re.compile(rf"(?<!\w){re.escape(word)}") for word in words)
+
+
 # Ключевые слова применяются к casefold-тексту с ё→е, поэтому — строчные.
-_RAM_RES = tuple(re.compile(rf"(?<!\w){re.escape(word)}") for word in RULE_RAM_KEYWORDS)
-_DRIVE_RES = tuple(re.compile(rf"(?<!\w){re.escape(word)}") for word in RULE_DRIVE_KEYWORDS)
+_RAM_RES = _keyword_res(RULE_RAM_KEYWORDS)
+_DRIVE_RES = _keyword_res(RULE_DRIVE_KEYWORDS)
+_DIAGONAL_RES = _keyword_res(RULE_DIAGONAL_KEYWORDS)
+_BATTERY_RES = _keyword_res(RULE_BATTERY_KEYWORDS)
+_STORAGE_RES = _keyword_res(RULE_STORAGE_KEYWORDS)
+# Порядок групп задаёт приоритет ключевых слов одного значения: конкретные
+# ключи ОЗУ/накопителя важнее общих («оперативная память» → ram, а не storage).
+_KEY_PHRASE_GROUPS = (
+    ("ram", _RAM_RES),
+    ("drive", _DRIVE_RES),
+    ("diagonal", _DIAGONAL_RES),
+    ("battery_capacity", _BATTERY_RES),
+    ("storage", _STORAGE_RES),
+)
+_MEMORY_KEYWORD_GROUPS = (("ram", _RAM_RES), ("drive", _DRIVE_RES))
 
 _BATTERY_UNIT_FALLBACK = "мА·ч"
 _DIAGONAL_UNIT_FALLBACK = "дюйм"
@@ -140,27 +182,44 @@ def _align_region_bounds(text: str, start: int, end: int) -> tuple[int, int]:
     return start, end
 
 
-def _keyword_classify(
-    folded: str, region_start: int, region_end: int, value_start: int
+def _nearest_keyword_code(
+    folded: str,
+    region_start: int,
+    region_end: int,
+    value_start: int,
+    groups: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...],
 ) -> str | None:
-    """Определить код поля памяти по ближайшему ключевому слову в окне.
+    """Определить код поля по ближайшему ключевому слову в окне.
 
     ``folded`` — casefold-текст с ё→е; окно ограничено соседними значениями
-    памяти (чтобы «оператив» не «прилипал» к чужому числу) и
-    ``RULE_KEYWORD_WINDOW`` вокруг значения; границы выравниваются по границе
-    слова. Возвращает ``"ram"``/``"drive"`` или ``None``, если ключевых слов
+    и ``RULE_KEYWORD_WINDOW`` вокруг значения, границы выравниваются по границе
+    слова. Возвращает код ближайшей группы или ``None``, если ключевых слов
     в окне нет.
     """
     region_start, region_end = _align_region_bounds(folded, region_start, region_end)
     segment = folded[region_start:region_end]
     best: tuple[int, str] | None = None
-    for code, patterns in (("ram", _RAM_RES), ("drive", _DRIVE_RES)):
+    for code, patterns in groups:
         for pattern in patterns:
             for match in pattern.finditer(segment):
                 distance = abs(region_start + match.start() - value_start)
                 if best is None or distance < best[0]:
                     best = (distance, code)
     return best[1] if best else None
+
+
+def _keyword_classify(
+    folded: str, region_start: int, region_end: int, value_start: int
+) -> str | None:
+    """Определить код поля памяти по ближайшему ключевому слову в окне.
+
+    Возвращает ``"ram"``/``"drive"`` или ``None``, если ключевых слов
+    в окне нет (значение памяти без ключевых слов разбирают вызывающие
+    правила: встроенный накопитель или эвристика соседства).
+    """
+    return _nearest_keyword_code(
+        folded, region_start, region_end, value_start, _MEMORY_KEYWORD_GROUPS
+    )
 
 
 def _adjacent(text: str, first_end: int, second_start: int) -> bool:
@@ -202,6 +261,60 @@ def _keyword_value(text: str, keyword_re: re.Pattern[str]) -> str | None:
         if value is not None:
             return value
     return None
+
+
+def _covered_spans(text: str) -> list[tuple[int, int]]:
+    """Отрезки, уже разобранные правилами единиц: их поле назначено и не меняется."""
+    spans: list[tuple[int, int]] = []
+    for pattern in (_DIAGONAL_RE, _BATTERY_RE, _MEMORY_SLASH_RE, _MEMORY_RE):
+        spans.extend(match.span() for match in pattern.finditer(text))
+    return spans
+
+
+def _is_covered(span: tuple[int, int], covered: list[tuple[int, int]]) -> bool:
+    """Пересекается ли число с уже разобранным правилами единиц отрезком."""
+    start, end = span
+    return any(
+        covered_start < end and start < covered_end for covered_start, covered_end in covered
+    )
+
+
+def _first_number_after(text: str, start: int) -> tuple[int, int] | None:
+    """Первое число в ближайшем токене после ключевого слова.
+
+    Токены без цифр — уточнения («Диагональ экрана 6,7»); поиск останавливается
+    на первом токене с цифрой, чтобы ключевое слово не «перепрыгивало» соседние
+    значения («Оперативная память 8 ГБ, Память 256») и не привязывало бы их
+    к себе. Токен с цифрами без безусловного числа («SM-S921B», «9H») тоже
+    завершает поиск: слитое с буквами число не является извлекаемым значением.
+    """
+    gap = 0
+    for token in _TOKEN_RE.finditer(text, start):
+        if not any(char.isdigit() for char in token.group()):
+            gap += 1
+            if gap > RULE_KEY_PHRASE_TOKEN_GAP:
+                return None
+            continue
+        number = _PROXIMITY_NUMBER_RE.search(text, token.start(), token.end())
+        return number.span() if number is not None else None
+    return None
+
+
+def _is_range_part(text: str, start: int, end: int) -> bool:
+    """Находится ли число внутри диапазона («3000-5000»): граница не извлекается."""
+    return bool(_is_range_tail(text, start) or _RANGE_SUFFIX_RE.match(text, end))
+
+
+def _has_blocked_tail(text: str, end: int) -> bool:
+    """Стоит ли после числа чужая мера («80 см») или цифра соотношения («16:9»).
+
+    Контекст ключевой фразы определяет поле, но не отменяет единицу измерения:
+    «Диагональ 80 см» — не 80 дюймов.
+    """
+    rest = text[end:]
+    if _DIGIT_TAIL_RE.match(rest):
+        return True
+    return bool(_BLOCKED_TAIL_RE.match(rest))
 
 
 class RuleExtractor(BaseExtractor):
@@ -253,6 +366,7 @@ class RuleExtractor(BaseExtractor):
         yield from self._diagonal_candidates(text)
         yield from self._battery_candidates(text)
         yield from self._memory_candidates(text)
+        yield from self._proximity_candidates(text)
         yield from self._color_candidates(text)
         model = _keyword_value(text, _MODEL_RE)
         if model is not None:
@@ -354,6 +468,41 @@ class RuleExtractor(BaseExtractor):
                 f"{format_number(parse_number(match.group('number')))} {unit}",
                 evidence,
             )
+
+    @staticmethod
+    def _proximity_candidates(text: str) -> Iterator[tuple[str, str, str, str]]:
+        """Шаблон ключевой фразы и близость ключевого слова к значению (Этап 3).
+
+        Ключевое слово поля связывается со значением без единицы, стоящим не
+        дальше ``RULE_KEY_PHRASE_TOKEN_GAP`` токенов («Диагональ: 6,7»,
+        «Ёмкость аккумулятора 4500», «ОЗУ: 8»); единица берётся из
+        ``RULE_PROXIMITY_DEFAULT_UNITS``. Отсечки: числа, разобранные правилами
+        единиц; границы диапазонов; чужая мера после числа («80 см») и значения
+        вне ``RULE_PROXIMITY_VALUE_RANGES`` — контекст определяет поле, но не
+        позволяет выдумать физически невозможное значение.
+        """
+        folded = text.lower().replace("ё", "е")
+        covered = _covered_spans(text)
+        bindings: dict[tuple[int, int], tuple[int, str]] = {}
+        for priority, (code, patterns) in enumerate(_KEY_PHRASE_GROUPS):
+            for pattern in patterns:
+                for match in pattern.finditer(folded):
+                    span = _first_number_after(text, match.end())
+                    if span is None or _is_covered(span, covered):
+                        continue
+                    if _is_range_part(text, *span) or _has_blocked_tail(text, span[1]):
+                        continue
+                    current = bindings.get(span)
+                    if current is None or priority < current[0]:
+                        bindings[span] = (priority, code)
+        for (start, end), (_priority, code) in sorted(bindings.items()):
+            evidence = text[start:end]
+            value = parse_number(evidence)
+            low, high = RULE_PROXIMITY_VALUE_RANGES[code]
+            if not low <= value <= high:
+                continue
+            unit = RULE_PROXIMITY_DEFAULT_UNITS[code]
+            yield (code, evidence, f"{format_number(value)} {unit}", evidence)
 
     @staticmethod
     def _color_candidates(text: str) -> Iterator[tuple[str, str, str, str]]:

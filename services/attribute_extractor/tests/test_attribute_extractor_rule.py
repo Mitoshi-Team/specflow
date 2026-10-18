@@ -242,6 +242,137 @@ def test_color_out_of_vocab_is_skipped() -> None:
     assert "color" not in _by_code(_extract(card))
 
 
+# --- Шаблоны ключевых фраз и близость ключевых слов --------------------------
+
+
+def test_keyphrase_diagonal_without_unit() -> None:
+    """«Диагональ: 6,7» — контекст ключевой фразы даёт единицу «дюйм»."""
+    card = ProductCard(description="Диагональ: 6,7")
+    candidate = _by_code(_extract(card))["diagonal"]
+    assert candidate.normalized_value == "6,7 дюйм"
+    _assert_span_points_to_text(candidate, card.description)
+
+
+def test_keyphrase_diagonal_dot_decimal() -> None:
+    """Точечная дробь после ключевого слова приводится к канонической запятой."""
+    card = ProductCard(description="Диагональ 6.7")
+    candidate = _by_code(_extract(card))["diagonal"]
+    assert candidate.normalized_value == "6,7 дюйм"
+
+
+def test_keyphrase_diagonal_with_qualifier_words() -> None:
+    """Уточнения между ключевым словом и значением не мешают близости."""
+    card = ProductCard(description="Диагональ экрана составляет 6,7")
+    candidate = _by_code(_extract(card))["diagonal"]
+    assert candidate.normalized_value == "6,7 дюйм"
+
+
+def test_keyphrase_diagonal_english() -> None:
+    """Английское ключевое слово «Diagonal: 6.7»."""
+    card = ProductCard(description="Diagonal: 6.7")
+    candidate = _by_code(_extract(card))["diagonal"]
+    assert candidate.normalized_value == "6,7 дюйм"
+
+
+def test_keyphrase_battery_capacity_without_unit() -> None:
+    """«Батарея: 4500» — единица мА·ч берётся из контекста ключевой фразы."""
+    card = ProductCard(description="Батарея: 4500")
+    candidate = _by_code(_extract(card))["battery_capacity"]
+    assert candidate.normalized_value == "4500 мА·ч"
+
+
+def test_keyphrase_battery_capacity_with_yo() -> None:
+    """«Ёмкость аккумулятора» пишется как «емкост» в casefold-тексте."""
+    card = ProductCard(description="Ёмкость аккумулятора 4500")
+    candidate = _by_code(_extract(card))["battery_capacity"]
+    assert candidate.normalized_value == "4500 мА·ч"
+
+
+def test_keyphrase_battery_capacity_english() -> None:
+    """Английское ключевое слово «Battery: 4500»."""
+    card = ProductCard(description="Battery: 4500")
+    candidate = _by_code(_extract(card))["battery_capacity"]
+    assert candidate.normalized_value == "4500 мА·ч"
+
+
+def test_keyphrase_ram_without_unit() -> None:
+    """«ОЗУ: 8» — единица ГБ берётся из контекста ключевой фразы."""
+    card = ProductCard(description="ОЗУ: 8")
+    by_code = _by_code(_extract(card))
+    assert by_code["ram"].normalized_value == "8 ГБ"
+    assert "storage" not in by_code
+
+
+def test_keyphrase_ram_beats_generic_memory_keyword() -> None:
+    """«Оперативная память 8» — конкретное ключевое слово важнее общего «память»."""
+    card = ProductCard(description="Оперативная память 8")
+    by_code = _by_code(_extract(card))
+    assert by_code["ram"].normalized_value == "8 ГБ"
+    assert "storage" not in by_code
+
+
+def test_keyphrase_storage_without_unit() -> None:
+    """«Встроенная память: 256» — встроенный накопитель без единицы."""
+    card = ProductCard(description="Встроенная память: 256")
+    by_code = _by_code(_extract(card))
+    assert by_code["storage"].normalized_value == "256 ГБ"
+    assert "ram" not in by_code
+
+
+def test_keyphrase_does_not_borrow_neighbour_value() -> None:
+    """Ключевое слово не «перепрыгивает» разобранное значение к соседнему.
+
+    «Оперативная память 8 ГБ, Память 256»: 8 ГБ разобрано правилом единиц,
+    «Оперативная» не привязывается к «256» — второй ОЗУ не появляется.
+    """
+    card = ProductCard(description="Оперативная память 8 ГБ, Память 256")
+    by_code = _by_code(_extract(card))
+    assert by_code["ram"].normalized_value == "8 ГБ"
+    assert by_code["storage"].normalized_value == "256 ГБ"
+
+
+def test_keyphrase_does_not_duplicate_unit_value() -> None:
+    """Значение с единицей разбирается один раз: правило единиц, не близость."""
+    card = ProductCard(description="Диагональ: 6,7 дюймов, батарея 4500 мА·ч")
+    codes = _codes(_extract(card))
+    assert codes.count("diagonal") == 1
+    assert codes.count("battery_capacity") == 1
+
+
+def test_keyphrase_foreign_measure_is_rejected() -> None:
+    """«Диагональ 80 см» — чужая единица отменяет близость ключевого слова."""
+    card = ProductCard(description="Диагональ 80 см")
+    assert "diagonal" not in _by_code(_extract(card))
+
+
+def test_keyphrase_time_measure_is_rejected() -> None:
+    """«Аккумулятор 3 года» — срок службы не является ёмкостью батареи."""
+    card = ProductCard(description="Аккумулятор 3 года")
+    assert "battery_capacity" not in _by_code(_extract(card))
+
+
+def test_keyphrase_screen_frequency_is_not_diagonal() -> None:
+    """«Экран 60 Гц» не является диагональю: «экран» — не ключевое слово поля."""
+    assert _extract(ProductCard(description="Экран 60 Гц")) == []
+
+
+def test_keyphrase_ratio_is_rejected() -> None:
+    """Соотношение сторон («16:9») не является числовым значением поля."""
+    card = ProductCard(description="Соотношение диагонали 16:9")
+    assert "diagonal" not in _by_code(_extract(card))
+
+
+def test_keyphrase_value_out_of_range_is_rejected() -> None:
+    """Значение вне допустимого диапазона поля не подтверждается близостью."""
+    card = ProductCard(description="Диагональ: 144")
+    assert "diagonal" not in _by_code(_extract(card))
+
+
+def test_keyphrase_bare_number_without_keyword_is_not_guessed() -> None:
+    """Число без ключевого слова и единицы полю не назначается (не выдумывать)."""
+    assert _extract(ProductCard(description="Комплект поставки 5000")) == []
+
+
 # --- Модель и процессор ------------------------------------------------------
 
 

@@ -8,9 +8,12 @@ in-memory реестр справочников, наследуемый норм
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from pydantic import BaseModel, Field
 
-from attribute_extractor.constants import DEFAULT_VOCAB_VERSION
+from attribute_extractor.constants import DEFAULT_BRAND_VOCAB_PATH, DEFAULT_VOCAB_VERSION
 
 
 class AttributeVocab(BaseModel):
@@ -130,3 +133,17 @@ def build_default_catalog() -> ReferenceCatalog:
     каталог с версией по умолчанию; наполнение — задача MLOps-контура.
     """
     return ReferenceCatalog()
+
+
+def load_brand_vocab(path: str | Path = DEFAULT_BRAND_VOCAB_PATH) -> BrandVocab | None:
+    """Загрузить бренд-словарь из версонируемого ассета.
+
+    Ассет собирается ``scripts/build_brand_vocab.py`` и хранится в репозитории
+    (domain-model.md §3.8). Отсутствие файла — штатная ситуация при первом
+    прогоне: возвращает ``None``, экстрактор работает без брендовых правил.
+    """
+    try:
+        with Path(path).open(encoding="utf-8") as file:
+            return BrandVocab.model_validate(json.load(file))
+    except FileNotFoundError:
+        return None

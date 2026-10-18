@@ -435,6 +435,8 @@ AUTO_THRESHOLD = DEFAULT_CONFIDENCE_THRESHOLD
 REVIEW_THRESHOLD = REVIEW_CONFIDENCE_THRESHOLD
 """Порог ручной проверки."""
 
+DEFAULT_BRAND_VOCAB_PATH = "services/attribute_extractor/assets/brand_vocab.json"
+
 DEFAULT_FIELD_CATALOG_PATH = "data/field_catalog.json"
 """Путь к каталогу полей по умолчанию."""
 

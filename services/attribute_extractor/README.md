@@ -316,6 +316,18 @@ seller-атрибутах и недостижимые из текста, иск�
 uv run uvicorn attribute_extractor.main:app --port 8001 --reload
 ```
 
+Офлайн-прогон файла карточек (CSV/TSV/JSON/JSONL) без HTTP — скрипт
+`scripts/run_batch.py`; настройки пайплайна берутся из переменных
+окружения `EXTRACTOR_*`:
+
+```bash
+python services/attribute_extractor/scripts/run_batch.py data/cards.csv --out /tmp/preds --csv
+```
+
+Результат — `predictions.jsonl` (сериализованные `ExtractionResult`) плюс
+`predictions.csv` в формате PredictionRow по флагу `--csv`. Быстрая проба —
+`--max-items 10`, размер части — `--batch-size` (по умолчанию 20).
+
 ## 7. Эндпоинты
 
 | Метод | Путь | Описание |

@@ -663,3 +663,16 @@ def test_extract_for_missing_keeps_deterministic_contract() -> None:
     assert candidate.extraction_method is ExtractionMethod.RULE
     assert candidate.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
     assert candidate.is_confirmed_in_text is True
+
+
+def test_extract_for_missing_assigns_metadata_to_every_fallback_candidate() -> None:
+    """Метаданные Этапа 7 проставляются каждому кандидату fallback:
+    метод и уверенность не зависят от того, какое правило нашло значение."""
+    extractor = RuleExtractor(BrandVocab(names=["Acme"]))
+    missing = {"storage", "diagonal", "color", "battery_capacity", "ram"}
+    result = extractor.extract_for_missing(_fallback_card(), _schema(), missing)
+    assert {candidate.attribute_code for candidate in result} == missing
+    for candidate in result:
+        assert candidate.extraction_method is ExtractionMethod.RULE
+        assert candidate.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
+        assert candidate.is_confirmed_in_text is True

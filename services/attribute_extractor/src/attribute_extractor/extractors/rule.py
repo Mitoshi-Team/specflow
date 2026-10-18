@@ -480,11 +480,22 @@ class RuleExtractor(BaseExtractor):
         из ``missing``: полными правилами обязательные поля не дублируются,
         а необязательные fallback не заполняет. Пустой ``missing`` — пустой
         список (правила не выполняются вхолостую).
+
+        Контракт этапа 7 (openspec/specs/attribute_extractor.md): кандидатам
+        fallback закрепляются ``extraction_method='rule'`` и
+        ``confidence=DEFAULT_DETERMINISTIC_CONFIDENCE`` — метаданные
+        гарантируются на границе fallback, а не наследуются от способа
+        поиска значения внутри правил.
         """
         if not missing:
             return []
         return [
-            candidate
+            candidate.model_copy(
+                update={
+                    "extraction_method": ExtractionMethod.RULE,
+                    "confidence": DEFAULT_DETERMINISTIC_CONFIDENCE,
+                }
+            )
             for candidate in self.extract(card, schema)
             if candidate.attribute_code in missing
         ]

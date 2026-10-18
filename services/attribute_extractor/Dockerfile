@@ -15,6 +15,8 @@ COPY services/api_gateway/pyproject.toml services/api_gateway/
 COPY services/attribute_extractor/pyproject.toml services/attribute_extractor/
 COPY services/contracts/src services/contracts/src
 COPY services/attribute_extractor/src services/attribute_extractor/src
+# Версонируемый бренд-словарь: без него brand/model-правила в образе выключены.
+COPY services/attribute_extractor/assets services/attribute_extractor/assets
 
 RUN uv sync --frozen --no-dev --package attribute-extractor
 

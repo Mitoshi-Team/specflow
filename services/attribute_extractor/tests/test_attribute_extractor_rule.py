@@ -455,6 +455,105 @@ def test_brand_stopword_skipped() -> None:
     assert "brand" not in _by_code(_extract(card, RuleExtractor(_brand_vocab())))
 
 
+# --- Модель по бренду ---------------------------------------------------------
+
+
+def _brand_extractor(*names: str) -> RuleExtractor:
+    return RuleExtractor(BrandVocab(names=list(names)))
+
+
+def test_model_after_brand() -> None:
+    """Хвост после бренда — модель; объём памяти её не дописывает."""
+    card = ProductCard(title="Смартфон Apple iPhone 13 Pro 256 ГБ")
+    by_code = _by_code(_extract(card, _brand_extractor("Apple")))
+    assert by_code["brand"].normalized_value == "Apple"
+    assert by_code["model"].normalized_value == "iPhone 13 Pro"
+    _assert_span_points_to_text(by_code["model"], card.title)
+
+
+def test_model_after_brand_stops_at_slit_unit_token() -> None:
+    """Ёмкость слитой с единицей («512GB») обрывает модель."""
+    card = ProductCard(title="Ноутбук ASUS VivoBook 15 M2 512GB")
+    candidate = _by_code(_extract(card, _brand_extractor("ASUS")))["model"]
+    assert candidate.normalized_value == "VivoBook 15 M2"
+
+
+def test_model_after_brand_stops_at_english_color() -> None:
+    """Английский цвет из словаря цветов — характеристика, не модель."""
+    card = ProductCard(title="Наушники Sony WH-1000XM5 Black")
+    candidate = _by_code(_extract(card, _brand_extractor("Sony")))["model"]
+    assert candidate.normalized_value == "WH-1000XM5"
+
+
+def test_model_after_brand_stops_at_panel_word() -> None:
+    """Технология панели («IPS») не входит в название модели."""
+    card = ProductCard(title="Монитор Dell U2723QE 27 IPS")
+    candidate = _by_code(_extract(card, _brand_extractor("Dell")))["model"]
+    assert candidate.normalized_value == "U2723QE"
+
+
+def test_model_after_brand_size_after_digit_token_is_not_model() -> None:
+    """«OLED55C41LA 55 4K»: размер после названия с цифрами — не модель."""
+    card = ProductCard(title="Телевизор LG OLED55C41LA 55 4K")
+    candidate = _by_code(_extract(card, _brand_extractor("LG")))["model"]
+    assert candidate.normalized_value == "OLED55C41LA"
+
+
+def test_model_after_brand_three_digit_number_with_cyrillic_tail() -> None:
+    """Трёхзначное число перед кириллицей — ёмкость, а не модель."""
+    card = ProductCard(title="Смартфон Apple iPhone 15 128 ГБ")
+    candidate = _by_code(_extract(card, _brand_extractor("Apple")))["model"]
+    assert candidate.normalized_value == "iPhone 15"
+
+
+def test_model_after_brand_keeps_number_before_model_token() -> None:
+    """«HP 250 G9»: трёхзначное число за размером — часть названия модели."""
+    card = ProductCard(title="Ноутбук HP 250 G9")
+    candidate = _by_code(_extract(card, _brand_extractor("HP")))["model"]
+    assert candidate.normalized_value == "250 G9"
+
+
+def test_model_after_brand_stops_at_cyrillic() -> None:
+    """Кириллица обрывает модель после бренда («Apple iPhone чёрный»)."""
+    card = ProductCard(title="Смартфон Apple iPhone чёрный")
+    candidate = _by_code(_extract(card, _brand_extractor("Apple")))["model"]
+    assert candidate.normalized_value == "iPhone"
+
+
+def test_keyword_model_beats_brand_model() -> None:
+    """Явный ключ «Модель:» приоритетнее модели после бренда (без конфликта)."""
+    card = ProductCard(title="Смартфон Apple iPhone 13 Pro — Модель: A2890")
+    models = [
+        candidate.normalized_value
+        for candidate in _extract(card, _brand_extractor("Apple"))
+        if candidate.attribute_code == "model"
+    ]
+    assert models == ["A2890"]
+
+
+def test_brand_model_requires_brand_vocab() -> None:
+    """Без словаря брендов модель после бренда не извлекается."""
+    card = ProductCard(title="Смартфон Apple iPhone 13 Pro")
+    assert "model" not in _by_code(_extract(card))
+
+
+def test_brand_stopword_blocks_model() -> None:
+    """Стоп-слово бренда не даёт ни бренда, ни модели после него."""
+    card = ProductCard(title="Смартфон Red 5G Pro")
+    by_code = _by_code(_extract(card, RuleExtractor(_brand_vocab())))
+    assert "brand" not in by_code
+    assert "model" not in by_code
+
+
+def test_brand_model_respects_word_boundaries() -> None:
+    """Совпадение внутри слова не порождает ни бренда, ни модели."""
+    card = ProductCard(title="Смартфон Acmeon 5G Pro")
+    extractor = RuleExtractor(BrandVocab(names=["Acme"]))
+    by_code = _by_code(_extract(card, extractor))
+    assert "brand" not in by_code
+    assert "model" not in by_code
+
+
 # --- Инварианты кандидатов ---------------------------------------------------
 
 

@@ -11,6 +11,7 @@ import json
 from pathlib import Path as FsPath
 
 from attribute_extractor.config import Settings
+from attribute_extractor.constants import DEFAULT_DETERMINISTIC_CONFIDENCE
 from attribute_extractor.extractors.base import BaseExtractor
 from attribute_extractor.extractors.ner import NER_EXTRACTOR_NAME
 from attribute_extractor.pipeline import ExtractPipeline
@@ -156,10 +157,53 @@ def test_ner_candidate_with_rules_fallback_fills_missing_required() -> None:
     assert by_code["brand"].confidence == 0.95
     assert by_code["brand"].ner_score == 0.95
     assert by_code["storage"].extraction_method == ExtractionMethod.RULE
+    assert by_code["storage"].confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
+    assert by_code["storage"].ner_score is None
     storage = by_code["storage"].normalized_value
     assert storage.endswith("ГБ")
     codes = {candidate.attribute_code for candidate in result.attributes}
     assert codes == {"brand", "storage"}
+    assert result.status == ExtractionStatus.OK
+
+
+def test_rules_fallback_disabled_keeps_ner_candidates_only() -> None:
+    """Тумблер ``enable_rules_fallback`` выключает Этап 7 целиком."""
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False, enable_rules_fallback=False),
+        registry=_registry_with_stub(),
+        preprocessor=CardPreprocessor(schemas=_required_schema_registry()),
+        normalizer=None,
+    )
+    result = pipeline.extract(_card_from_gold(RECORD_1))
+
+    codes = {candidate.attribute_code for candidate in result.attributes}
+    assert codes == {"brand"}
+    assert result.status == ExtractionStatus.PARTIAL
+    assert result.needs_review is True
+
+
+def test_rules_fallback_skips_when_ner_closed_all_required() -> None:
+    """Все обязательные закрыты NER-путём — правила не запускаются (Этап 7)."""
+    from attribute_extractor.preprocessing import generic_schema
+
+    schema = generic_schema().model_copy(
+        update={
+            "category": "Смартфоны",
+            "required_attributes": [
+                Attribute(code="brand", value_type=AttributeValueType.STRING, is_required=True),
+            ],
+        }
+    )
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=_registry_with_stub(),
+        preprocessor=CardPreprocessor(schemas=SchemaRegistry([schema])),
+        normalizer=None,
+    )
+    result = pipeline.extract(_card_from_gold(RECORD_1))
+
+    codes = {candidate.attribute_code for candidate in result.attributes}
+    assert codes == {"brand"}
     assert result.status == ExtractionStatus.OK
 
 

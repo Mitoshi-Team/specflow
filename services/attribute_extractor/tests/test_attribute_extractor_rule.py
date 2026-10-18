@@ -610,3 +610,56 @@ def test_extraction_is_deterministic() -> None:
     first = [c.model_dump() for c in _extract(card, extractor)]
     second = [c.model_dump() for c in _extract(card, extractor)]
     assert first == second
+
+
+# --- Rules-fallback (Этап 7) -------------------------------------------------
+
+
+def _fallback_card() -> ProductCard:
+    return ProductCard(
+        title="Смартфон Acme X 8/256 ГБ, чёрный",
+        description="Экран 6,7 дюймов, батарея 5000 мА·ч",
+    )
+
+
+def test_extract_for_missing_keeps_only_requested_codes() -> None:
+    """Fallback возвращает только коды из ``missing`` — остальное отсечено."""
+    extractor = RuleExtractor(BrandVocab(names=["Acme"]))
+    missing = {"storage", "diagonal"}
+    codes = _codes(extractor.extract_for_missing(_fallback_card(), _schema(), missing))
+    assert codes
+    assert set(codes) <= missing
+
+
+def test_extract_for_missing_skips_codes_closed_by_other_path() -> None:
+    """Код вне ``missing`` (закрыт другим путём) в результат не попадает."""
+    extractor = RuleExtractor(BrandVocab(names=["Acme"]))
+    card = _fallback_card()
+    assert "storage" in _codes(extractor.extract(card, _schema()))  # правила вообще его находят
+    result = extractor.extract_for_missing(card, _schema(), {"diagonal"})
+    assert result
+    assert {candidate.attribute_code for candidate in result} == {"diagonal"}
+
+
+def test_extract_for_missing_empty_missing_runs_no_rules() -> None:
+    """Пустой набор незакрытых полей — правила не выполняются (пустой список)."""
+    extractor = RuleExtractor(BrandVocab(names=["Acme"]))
+    assert extractor.extract_for_missing(_fallback_card(), _schema(), set()) == []
+
+
+def test_extract_for_missing_absent_value_yields_nothing() -> None:
+    """Отсутствующее в тексте обязательное поле fallback не выдумывает."""
+    extractor = RuleExtractor(BrandVocab(names=["Acme"]))
+    card = ProductCard(title="Смартфон Acme X, чёрный")
+    assert extractor.extract_for_missing(card, _schema(), {"ram"}) == []
+
+
+def test_extract_for_missing_keeps_deterministic_contract() -> None:
+    """Кандидаты fallback несут rule-метод и детерминированную уверенность."""
+    extractor = RuleExtractor(BrandVocab(names=["Acme"]))
+    result = extractor.extract_for_missing(_fallback_card(), _schema(), {"storage"})
+    assert len(result) == 1
+    candidate = result[0]
+    assert candidate.extraction_method is ExtractionMethod.RULE
+    assert candidate.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
+    assert candidate.is_confirmed_in_text is True

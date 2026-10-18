@@ -150,11 +150,7 @@ class ExtractPipeline:
         }
         if not fallback_codes:
             return ner_candidates
-        return ner_candidates + [
-            candidate
-            for candidate in rule.extract(card, schema)
-            if candidate.attribute_code in fallback_codes
-        ]
+        return ner_candidates + rule.extract_for_missing(card, schema, fallback_codes)
 
     def _run_ner(self, card: ProductCard, schema: CategorySchema) -> list[AttributeCandidate]:
         """Этап 4: NER-кандидаты; без модели/при ошибке — пусто (degradation)."""

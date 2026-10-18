@@ -366,8 +366,12 @@ RULE_MEMORY_PATTERN = r"(?P<number>\d+)\s*(?P<unit>ГБ|ТБ|GB|TB)"
 RULE_MEMORY_SLASH_PATTERN = r"(?P<first>\d+)\s*[/+]\s*(?P<second>\d+)\s*(?P<unit>ГБ|ТБ|GB|TB)"
 """Слэш-пара «8/256 ГБ»: первый объём — ОЗУ, второй — по ключевому слову."""
 
-RULE_BATTERY_PATTERN = r"(?P<number>\d+)\s*(?P<unit>мА·ч|мАч|mAh)"
-"""Ёмкость батареи: число рядом с мА·ч/мАч/mAh (с IGNORECASE)."""
+RULE_BATTERY_PATTERN = r"(?P<number>\d+)\s*(?P<unit>мА[·*]ч|мАч|ma[·*]h|mAh)"
+"""Ёмкость батареи: число рядом с мА·ч/мА*ч/мАч/mAh (с IGNORECASE).
+
+Разделитель `*` встречается в карточках продавцов так же часто, как `·`
+(«5000 мА*ч»); оба варианта уже присутствуют в ``CANONICAL_UNIT_ALIASES``.
+"""
 
 RULE_COLOR_TEMPLATE_PATTERN = (
     r"\bцвет(?:а|у|ом|е|ой|ы)?\b"

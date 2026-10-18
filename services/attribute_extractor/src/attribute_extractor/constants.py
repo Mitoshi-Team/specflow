@@ -15,6 +15,12 @@ API_PREFIX = "/api/v1"
 HEALTH_ENDPOINT = "/health"
 """Путь эндпоинта проверки работоспособности (относительно ``API_PREFIX``)."""
 
+EXTRACT_ENDPOINT = "/extract"
+EXTRACT_BATCH_ENDPOINT = "/extract/batch"
+CATEGORIES_ENDPOINT = "/categories"
+INFO_ENDPOINT = "/info"
+CONFIG_ENDPOINT = "/config"
+
 # --- Версии -----------------------------------------------------------------
 
 SERVICE_VERSION = "0.1.0"
@@ -563,6 +569,11 @@ DEFAULT_ENABLE_RULES_FALLBACK = True
 """Тумблер rules-fallback после NER (Этап 7) в оркестраторе."""
 
 DEFAULT_BRAND_VOCAB_PATH = "services/attribute_extractor/assets/brand_vocab.json"
+
+CATEGORY_LIST_DEFAULT_LIMIT = 50
+"""Значение ``limit`` по умолчанию для списка схем категорий."""
+
+CATEGORY_LIST_MAX_LIMIT = 200
 
 DEFAULT_FIELD_CATALOG_PATH = "data/field_catalog.json"
 """Путь к каталогу полей по умолчанию."""

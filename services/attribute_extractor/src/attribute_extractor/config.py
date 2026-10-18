@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     match_threshold: float = Field(DEFAULT_MATCH_THRESHOLD, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE)
     vector_k: int = Field(DEFAULT_VECTOR_K, ge=1)
 
+    # CORS
+    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+
     @model_validator(mode="after")
     def _validate_threshold_order(self) -> "Settings":
         """Порог ручной проверки не может превышать порог автоматизации."""

@@ -320,7 +320,16 @@ uv run uvicorn attribute_extractor.main:app --port 8001 --reload
 
 | Метод | Путь | Описание |
 | --- | --- | --- |
-| GET | `/api/v1/health` | Проверка работоспособности |
+| POST | `/api/v1/extract` | Извлечение атрибутов одной карточки |
+| POST | `/api/v1/extract/batch` | Пакетное извлечение (частичный успех, `threshold_override`) |
+| GET | `/api/v1/categories` | Список схем категорий (`category`, `limit` ≤ 200, `offset`) |
+| GET | `/api/v1/categories/{category}` | Схема категории (404 ErrorResponse, если не найдена) |
+| GET | `/api/v1/health` | Проверка работоспособности (`degraded`, пока NER не загружен) |
+| GET | `/api/v1/info` | Информация о сервисе (версии, методы, пороги, features) |
+| GET | `/api/v1/config` | Текущие пороги уверенности (read-only, без секретов) |
+
+Автодокументация OpenAPI: `/docs`, `/redoc`. Форма ответов — по спецификации
+`openspec/specs/api_contract.md` (разделы 3–4).
 
 В docker-сети сервис доступен API Gateway по адресу
 `http://attribute_extractor:8001`.

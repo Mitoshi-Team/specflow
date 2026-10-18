@@ -66,8 +66,15 @@ class ExtractPipeline:
         self._merger = merger if merger is not None else CandidateMerger()
         self._grounding = grounding if grounding is not None else GroundingValidator()
 
-    def extract(self, card: ProductCard) -> ExtractionResult:
-        """Извлечь атрибуты карточки и вернуть ``ExtractionResult`` (Этап 11)."""
+    def extract(
+        self, card: ProductCard, *, confidence_threshold: float | None = None
+    ) -> ExtractionResult:
+        """Извлечь атрибуты карточки и вернуть ``ExtractionResult`` (Этап 11).
+
+        ``confidence_threshold`` — локальное переопределение порога
+        «автоматическое принятие» для одного вызова (batch-эндпоинт передаёт
+        ``threshold_override``); ``Settings`` при этом не мутирует.
+        """
         started = time.monotonic()
         if not _has_text(card):
             return self._finish(
@@ -78,17 +85,9 @@ class ExtractPipeline:
                 low_confidence_count=0,
                 started=started,
             )
-        try:
-            preprocessed = self._preprocessor.preprocess(card)
-        except ValueError:
-            return self._finish(
-                card,
-                attributes=[],
-                status=ExtractionStatus.ERROR,
-                needs_review=True,
-                low_confidence_count=0,
-                started=started,
-            )
+        # Нарушение инварианта очистки (ValueError) пробрасывается наружу —
+        # API транслирует его в 500 (api_contract.md, 4.1).
+        preprocessed = self._preprocessor.preprocess(card)
         candidates = self._collect_candidates(preprocessed)
 
         if self._normalizer is not None:
@@ -97,7 +96,11 @@ class ExtractPipeline:
         if self._settings.grounding_required:
             candidates = self._grounding.filter(candidates, card)
 
-        auto = self._settings.default_confidence_threshold
+        auto = (
+            self._settings.default_confidence_threshold
+            if confidence_threshold is None
+            else confidence_threshold
+        )
         low_confidence_count = sum(1 for candidate in candidates if candidate.confidence < auto)
         has_conflict = any(
             candidate.features and CONFLICT_FEATURE_KEY in candidate.features

@@ -129,6 +129,58 @@ def test_merge_unions_source_spans_without_duplicates() -> None:
     assert result[0].source_spans == [shared, extra]
 
 
+def test_merge_same_value_keeps_payload_of_best_candidate() -> None:
+    """При одинаковом ``normalized_value`` остаётся лучший по confidence:
+    его raw_value/evidence сохраняются, спаны дублей объединяются без потерь."""
+    winner = AttributeCandidate(
+        attribute_code="color",
+        raw_value="чёрный",
+        normalized_value="чёрный",
+        confidence=0.9,
+        extraction_method=ExtractionMethod.RULE,
+        is_confirmed_in_text=True,
+        source_spans=[Span(field=SpanField.TITLE, text="чёрный", start=0, end=6)],
+        evidence_text="Цвет корпуса: чёрный",
+    )
+    duplicate = AttributeCandidate(
+        attribute_code="color",
+        raw_value="Black",
+        normalized_value="чёрный",
+        confidence=0.7,
+        extraction_method=ExtractionMethod.NER,
+        is_confirmed_in_text=True,
+        source_spans=[Span(field=SpanField.DESCRIPTION, text="Black", start=20, end=25)],
+        evidence_text="Black",
+        ner_score=0.7,
+    )
+    result = CandidateMerger().merge([duplicate, winner])
+    assert len(result) == 1
+    assert result[0].raw_value == "чёрный"
+    assert result[0].evidence_text == "Цвет корпуса: чёрный"
+    assert result[0].confidence == pytest.approx(0.9)
+    # Спаны объединяются в порядке первого появления кандидатов на входе.
+    assert result[0].source_spans == duplicate.source_spans + winner.source_spans
+
+
+def test_merge_collapses_identical_duplicate_candidates() -> None:
+    """Полностью идентичные дубликаты (одинаковые код/значение/спаны) схлопываются."""
+    result = CandidateMerger().merge(
+        [
+            _candidate(spans=[Span(field=SpanField.TITLE, text="black", start=0, end=5)]),
+            _candidate(spans=[Span(field=SpanField.TITLE, text="black", start=0, end=5)]),
+        ]
+    )
+    assert len(result) == 1
+    assert result[0].source_spans == [Span(field=SpanField.TITLE, text="black", start=0, end=5)]
+
+
+def test_merge_dedups_repeated_spans_within_one_candidate() -> None:
+    """Повтор спана внутри одного кандидата тоже устраняется при объединении."""
+    span = Span(field=SpanField.DESCRIPTION, text="black", start=10, end=15)
+    result = CandidateMerger().merge([_candidate(spans=[span, span]), _candidate(spans=[span])])
+    assert result[0].source_spans == [span]
+
+
 def test_conflict_keeps_max_confidence_with_flag() -> None:
     """Разные значения одного атрибута: остаётся max confidence с флагом конфликта."""
     result = CandidateMerger().merge(

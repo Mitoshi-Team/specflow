@@ -9,6 +9,10 @@ from attribute_extractor.constants import (
     API_PREFIX,
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_ENABLE_NER,
+    DEFAULT_ENABLE_RULES,
+    DEFAULT_ENABLE_RULES_FALLBACK,
+    DEFAULT_ENABLE_VECTOR_MATCH,
     DEFAULT_ENUM_STRICT,
     DEFAULT_GROUNDING_REQUIRED,
     DEFAULT_MATCH_THRESHOLD,
@@ -66,6 +70,12 @@ class Settings(BaseSettings):
     normalization_enabled: bool = DEFAULT_NORMALIZATION_ENABLED
     unit_conversion_enabled: bool = DEFAULT_UNIT_CONVERSION_ENABLED
     enum_strict: bool = DEFAULT_ENUM_STRICT
+
+    # Тумблеры этапов пайплайна.
+    enable_rules: bool = DEFAULT_ENABLE_RULES
+    enable_ner: bool = DEFAULT_ENABLE_NER
+    enable_vector_match: bool = DEFAULT_ENABLE_VECTOR_MATCH
+    enable_rules_fallback: bool = DEFAULT_ENABLE_RULES_FALLBACK
 
     # Резолв поля (векторный матч).
     vector_backend: Literal["auto", "embedding", "lexical"] = DEFAULT_VECTOR_BACKEND

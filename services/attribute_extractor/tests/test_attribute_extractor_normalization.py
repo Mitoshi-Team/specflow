@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from attribute_extractor.constants import ENUM_OUT_OF_VOCAB_FEATURE_KEY
+from attribute_extractor.constants import REVIEW_THRESHOLD
 from attribute_extractor.normalization import ValueNormalizer
 from attribute_extractor.references import (
     AttributeVocab,
@@ -23,13 +23,14 @@ def _candidate(
     value: str,
     *,
     code: str = "color",
+    confidence: float = 0.9,
     features: dict[str, object] | None = None,
 ) -> AttributeCandidate:
     return AttributeCandidate(
         attribute_code=code,
         raw_value=value,
         normalized_value=value,
-        confidence=0.9,
+        confidence=confidence,
         extraction_method=ExtractionMethod.RULE,
         is_confirmed_in_text=True,
         features=features,
@@ -154,8 +155,13 @@ def test_enum_synonym_value() -> None:
     assert result.normalized_value == "Чёрный"
 
 
-def test_enum_out_of_vocab_flags_when_not_strict() -> None:
-    """Вне словаря без strict: значение сохраняется с признаком."""
+def test_enum_out_of_vocab_caps_confidence_to_review_threshold() -> None:
+    """Вне словаря без strict: значение сохраняется, confidence → REVIEW_THRESHOLD.
+
+    Этап 6 (спека): неуспех маппинга через synonyms_map даёт ``low_confidence``
+    по порогам Этапа 10 — кандидат попадает в полосу
+    ``REVIEW_THRESHOLD <= confidence < AUTO_THRESHOLD``.
+    """
     vocab = AttributeVocab(attribute_code="color", canonical_values=["Чёрный"])
     normalizer = ValueNormalizer(_catalog_with(vocab), enum_strict=False)
     result = normalizer.normalize(
@@ -163,7 +169,37 @@ def test_enum_out_of_vocab_flags_when_not_strict() -> None:
     )
     assert result is not None
     assert result.normalized_value == "красный"
-    assert result.features == {ENUM_OUT_OF_VOCAB_FEATURE_KEY: True}
+    assert REVIEW_THRESHOLD <= result.confidence < 0.80
+    assert result.confidence == REVIEW_THRESHOLD
+    assert result.features is None
+
+
+def test_enum_out_of_vocab_keeps_already_low_confidence() -> None:
+    """Уже низкая уверенность не повышается до порога review."""
+    vocab = AttributeVocab(attribute_code="color", canonical_values=["Чёрный"])
+    normalizer = ValueNormalizer(_catalog_with(vocab), enum_strict=False)
+    result = normalizer.normalize(
+        _candidate("красный", code="color", confidence=0.45),
+        _attribute("color", AttributeValueType.ENUM),
+    )
+    assert result is not None
+    assert result.confidence == 0.45
+
+
+def test_enum_mapped_value_keeps_confidence() -> None:
+    """Успешный маппинг (vocab/synonyms_map) не снижает уверенность."""
+    vocab = AttributeVocab(
+        attribute_code="color",
+        canonical_values=["Чёрный"],
+        synonyms_map={"black": "Чёрный"},
+    )
+    normalizer = ValueNormalizer(_catalog_with(vocab), enum_strict=False)
+    result = normalizer.normalize(
+        _candidate("black", code="color"), _attribute("color", AttributeValueType.ENUM)
+    )
+    assert result is not None
+    assert result.normalized_value == "Чёрный"
+    assert result.confidence == 0.9
 
 
 def test_enum_out_of_vocab_dropped_when_strict() -> None:
@@ -176,8 +212,8 @@ def test_enum_out_of_vocab_dropped_when_strict() -> None:
     assert result is None
 
 
-def test_enum_existing_features_are_preserved() -> None:
-    """Существующие features не теряются при добавлении признака enum."""
+def test_enum_out_of_vocab_preserves_existing_features() -> None:
+    """Неуспех маппинга не добавляет признаков: features кандидата сохраняются."""
     vocab = AttributeVocab(attribute_code="color", canonical_values=["Чёрный"])
     normalizer = ValueNormalizer(_catalog_with(vocab))
     result = normalizer.normalize(
@@ -185,7 +221,8 @@ def test_enum_existing_features_are_preserved() -> None:
         _attribute("color", AttributeValueType.ENUM),
     )
     assert result is not None
-    assert result.features == {"conflict": True, ENUM_OUT_OF_VOCAB_FEATURE_KEY: True}
+    assert result.confidence == REVIEW_THRESHOLD
+    assert result.features == {"conflict": True}
 
 
 def test_string_synonym_mapping() -> None:

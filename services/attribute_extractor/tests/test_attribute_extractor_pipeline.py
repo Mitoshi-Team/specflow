@@ -166,6 +166,27 @@ def test_ner_candidate_with_rules_fallback_fills_missing_required() -> None:
     assert result.status == ExtractionStatus.OK
 
 
+def test_rules_fallback_candidates_keep_deterministic_metadata_end_to_end() -> None:
+    """Кандидаты fallback несут rule-метод и ``DEFAULT_DETERMINISTIC_CONFIDENCE``
+    после полного каскада (нормализация, слияние, grounding) на настройках
+    по умолчанию — Этап 7 фиксирует метаданные, а не наследует их."""
+    pipeline = ExtractPipeline(
+        settings=Settings(),
+        registry=_registry_with_stub(),
+        preprocessor=CardPreprocessor(schemas=_required_schema_registry()),
+    )
+    result = pipeline.extract(_card_from_gold(RECORD_1))
+
+    by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
+    storage = by_code["storage"]
+    assert storage.extraction_method == ExtractionMethod.RULE
+    assert storage.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
+    assert storage.ner_score is None
+    assert storage.is_confirmed_in_text is True
+    assert by_code["brand"].extraction_method == ExtractionMethod.NER
+    assert by_code["brand"].confidence == 0.95
+
+
 def test_rules_fallback_disabled_keeps_ner_candidates_only() -> None:
     """Тумблер ``enable_rules_fallback`` выключает Этап 7 целиком."""
     pipeline = ExtractPipeline(

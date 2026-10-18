@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 
 from attribute_extractor.constants import (
     CANONICAL_UNIT_ALIASES,
@@ -468,6 +468,26 @@ class RuleExtractor(BaseExtractor):
                     )
                 )
         return candidates
+
+    def extract_for_missing(
+        self, card: ProductCard, schema: CategorySchema, missing: Collection[str]
+    ) -> list[AttributeCandidate]:
+        """Rules-fallback (Этап 7): правила только для незакрытых полей схемы.
+
+        ``missing`` — коды обязательных атрибутов, которые не закрыли
+        предыдущие пути каскада (NER-путь; seller-атрибуты пайплайном не
+        используются — Этап 2 удалён). Возвращаются только кандидаты с кодом
+        из ``missing``: полными правилами обязательные поля не дублируются,
+        а необязательные fallback не заполняет. Пустой ``missing`` — пустой
+        список (правила не выполняются вхолостую).
+        """
+        if not missing:
+            return []
+        return [
+            candidate
+            for candidate in self.extract(card, schema)
+            if candidate.attribute_code in missing
+        ]
 
     def _extract_from_text(self, text: str) -> Iterator[tuple[str, str, str, str]]:
         """Последовательность rule-правил по одному полю (детерминированный порядок)."""

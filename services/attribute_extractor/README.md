@@ -173,7 +173,7 @@ def clean(card: ProductCard) -> CleanedCard                                    #
 def resolve_schema(card: ProductCard, registry: SchemaRegistry) -> CategorySchema  # ✅ SchemaRegistry.resolve
 def extract_rules(card: CleanedCard, schema: CategorySchema) -> list[AttributeCandidate]       # ✅ RuleExtractor.extract
 def normalize_value(raw: str, field: FieldCatalogEntry | None) -> NormalizedValue              # ✅ ValueNormalizer.normalize
-def rules_fallback(card: CleanedCard, schema: CategorySchema, missing: set[str]) -> list[AttributeCandidate]  # 🎯
+def rules_fallback(card: ProductCard, schema: CategorySchema, missing: set[str]) -> list[AttributeCandidate]  # ✅ RuleExtractor.extract_for_missing
 def merge(candidates: list[AttributeCandidate]) -> list[AttributeCandidate]    # ✅ CandidateMerger.merge
 def ground(candidates: list[AttributeCandidate], card: CleanedCard) -> list[AttributeCandidate]  # ✅ GroundingValidator.filter
 def score(candidates: list[AttributeCandidate], config: ConfidenceConfig) -> list[AttributeCandidate]  # 🎯

@@ -12,6 +12,7 @@ from pathlib import Path as FsPath
 
 from attribute_extractor.config import Settings
 from attribute_extractor.constants import (
+    CONFLICT_FEATURE_KEY,
     DEFAULT_DETERMINISTIC_CONFIDENCE,
     REVIEW_THRESHOLD,
     RULE_EXTRACTOR_NAME,
@@ -350,3 +351,103 @@ def test_enum_in_vocab_keeps_card_ok() -> None:
     assert color.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
     assert result.low_confidence_count == 0
     assert result.status == ExtractionStatus.OK
+
+
+class _StubConflictRule(BaseExtractor):
+    """FAKE rule-экстрактор: два разных значения одного кода (конфликт)."""
+
+    name = RULE_EXTRACTOR_NAME
+    priority = 0
+
+    def extract(self, card: ProductCard, schema) -> list[AttributeCandidate]:
+        return [
+            AttributeCandidate(
+                attribute_code="color",
+                raw_value="черный",
+                normalized_value="черный",
+                confidence=DEFAULT_DETERMINISTIC_CONFIDENCE,
+                extraction_method=ExtractionMethod.RULE,
+                is_confirmed_in_text=True,
+                evidence_text="черный",
+            ),
+            AttributeCandidate(
+                attribute_code="color",
+                raw_value="белый",
+                normalized_value="белый",
+                confidence=REVIEW_THRESHOLD,
+                extraction_method=ExtractionMethod.NER,
+                is_confirmed_in_text=True,
+                evidence_text="белый",
+            ),
+        ]
+
+
+def test_conflicting_values_keep_max_confidence_and_mark_low_confidence() -> None:
+    """Этап 8: разные значения одного кода → остаётся max confidence с флагом
+    конфликта, карточка получает ``needs_review=true`` и статус ``low_confidence``.
+
+    Победитель выше AUTO-порога, поэтому ``low_confidence_count`` не растёт —
+    в ``low_confidence`` карточку переводит сам конфликт (Этап 10).
+    """
+    from attribute_extractor.extractors import ExtractorRegistry
+
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=ExtractorRegistry([_StubConflictRule()]),
+        normalizer=None,
+    )
+    card = ProductCard(
+        product_id="p-conflict",
+        title="Смартфон цвет черный и белый",
+        category_name="Смартфоны",
+    )
+    result = pipeline.extract(card)
+
+    assert [candidate.attribute_code for candidate in result.attributes] == ["color"]
+    color = result.attributes[0]
+    assert color.normalized_value == "черный"
+    assert color.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
+    assert color.features == {CONFLICT_FEATURE_KEY: True}
+    assert result.low_confidence_count == 0
+    assert result.needs_review is True
+    assert result.status == ExtractionStatus.LOW_CONFIDENCE
+
+
+def test_conflict_with_missing_required_marks_partial() -> None:
+    """Конфликт вместе с незакрытым обязательным атрибутом → ``partial``
+    имеет приоритет над ``low_confidence``, ``needs_review`` остаётся ``true``."""
+    from attribute_extractor.extractors import ExtractorRegistry
+    from attribute_extractor.preprocessing import generic_schema
+
+    schema = generic_schema().model_copy(
+        update={
+            "category": "Смартфоны",
+            "required_attributes": [
+                Attribute(code="color", value_type=AttributeValueType.ENUM, is_required=True),
+                Attribute(
+                    code="storage",
+                    value_type=AttributeValueType.UNIT_VALUE,
+                    is_required=True,
+                    unit="ГБ",
+                ),
+            ],
+        }
+    )
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=ExtractorRegistry([_StubConflictRule()]),
+        preprocessor=CardPreprocessor(schemas=SchemaRegistry([schema])),
+        normalizer=None,
+    )
+    # Схема требует color и storage; color конфликтует, storage отсутствует.
+    card = ProductCard(
+        product_id="p-conflict-partial",
+        title="Смартфон цвет черный и белый",
+        category_name="Смартфоны",
+    )
+    result = pipeline.extract(card)
+
+    assert [candidate.attribute_code for candidate in result.attributes] == ["color"]
+    assert result.attributes[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result.needs_review is True
+    assert result.status == ExtractionStatus.PARTIAL

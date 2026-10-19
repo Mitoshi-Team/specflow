@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import time
 
+from attribute_extractor.confidence import ConfidenceCalculator
 from attribute_extractor.config import Settings
 from attribute_extractor.constants import (
     CONFLICT_FEATURE_KEY,
@@ -51,6 +52,7 @@ class ExtractPipeline:
         normalizer: ValueNormalizer | None = None,
         merger: CandidateMerger | None = None,
         grounding: GroundingValidator | None = None,
+        confidence: ConfidenceCalculator | None = None,
     ) -> None:
         self._settings = settings if settings is not None else Settings()
         self._registry = registry if registry is not None else build_default_registry()
@@ -65,6 +67,11 @@ class ExtractPipeline:
             )
         self._merger = merger if merger is not None else CandidateMerger()
         self._grounding = grounding if grounding is not None else GroundingValidator()
+        self._confidence = (
+            confidence
+            if confidence is not None
+            else ConfidenceCalculator(self._settings.deterministic_confidence)
+        )
 
     def extract(
         self, card: ProductCard, *, confidence_threshold: float | None = None
@@ -90,6 +97,10 @@ class ExtractPipeline:
         # (api_contract.md, 4.1).
         preprocessed = self._preprocessor.preprocess(card)
         candidates = self._collect_candidates(preprocessed)
+        # Этап 10 (расчёт уверенности) выполняется сразу после извлечения, до
+        # нормализации: уверенность задаётся методом (structured/rule/ner), а
+        # нормализация может лишь понизить её (enum вне словаря, Этап 6).
+        candidates = self._confidence.apply(candidates)
 
         if self._normalizer is not None:
             candidates = self._normalizer.normalize_all(candidates, preprocessed.category_schema)

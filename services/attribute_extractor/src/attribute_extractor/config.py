@@ -27,6 +27,7 @@ from attribute_extractor.constants import (
     DEFAULT_VECTOR_BACKEND,
     DEFAULT_VECTOR_K,
     DEFAULT_VOCAB_VERSION,
+    DETERMINISTIC_CONFIDENCE,
     MAX_CONFIDENCE,
     MIN_BATCH_SIZE,
     MIN_CONFIDENCE,
@@ -60,6 +61,9 @@ class Settings(BaseSettings):
     )
     review_confidence_threshold: float = Field(
         REVIEW_CONFIDENCE_THRESHOLD, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE
+    )
+    deterministic_confidence: float = Field(
+        DETERMINISTIC_CONFIDENCE, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE
     )
 
     # Пакетная обработка.

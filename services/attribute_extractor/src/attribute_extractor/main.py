@@ -13,7 +13,6 @@ from attribute_extractor.constants import (
     CATEGORY_LIST_DEFAULT_LIMIT,
     CATEGORY_LIST_MAX_LIMIT,
     CONFIG_ENDPOINT,
-    DEFAULT_DETERMINISTIC_CONFIDENCE,
     EXTRACT_BATCH_ENDPOINT,
     EXTRACT_ENDPOINT,
     GENERIC_CATEGORY,
@@ -257,7 +256,7 @@ def create_app() -> FastAPI:
                 "review": app_settings.review_confidence_threshold,
             },
             "match_threshold": app_settings.match_threshold,
-            "deterministic_confidence": DEFAULT_DETERMINISTIC_CONFIDENCE,
+            "deterministic_confidence": app_settings.deterministic_confidence,
         }
 
     return app

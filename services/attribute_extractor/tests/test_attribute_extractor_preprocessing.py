@@ -13,6 +13,7 @@ from attribute_extractor.constants import (
     LANGUAGE_RU,
     LANGUAGE_UNKNOWN,
 )
+from attribute_extractor.errors import TextCleanupInvariantError
 from attribute_extractor.preprocessing import (
     CardPreprocessor,
     SchemaRegistry,
@@ -288,14 +289,14 @@ def test_preprocess_preserves_content_values() -> None:
 
 
 def test_preprocess_raises_on_cleaning_invariant_violation(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Препроцессинг падает, если очистка нарушила инвариант значений."""
+    """Препроцессинг падает доменным исключением, если очистка нарушила инвариант."""
     monkeypatch.setattr(
         preprocessing,
         "cleaning_invariant_violations",
         lambda *args, **kwargs: ["значение потеряно при очистке: '6.7'"],
     )
     card = ProductCard(title="Экран 6.7 дюйма")
-    with pytest.raises(ValueError, match="инвариант очистки"):
+    with pytest.raises(TextCleanupInvariantError, match="инвариант очистки"):
         CardPreprocessor().preprocess(card)
 
 

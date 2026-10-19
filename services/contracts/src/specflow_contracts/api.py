@@ -12,6 +12,7 @@ from specflow_contracts.constants import (
     DEFAULT_RETURN_SOURCES,
     MAX_BATCH_SIZE,
     MAX_CONFIDENCE,
+    MAX_TEXT_LENGTH,
     MIN_BATCH_SIZE,
     MIN_CONFIDENCE,
 )
@@ -27,6 +28,17 @@ class ProductCardRequest(ProductCard):
         if not self.has_text_content():
             raise ValueError(
                 "Хотя бы одно из полей title, description, seller_attributes должно быть непустым"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _limit_text_size(self) -> "ProductCardRequest":
+        """Soft-limit: слишком большое описание отклоняется с понятной 422 (api_contract.md, 5)."""
+        text_length = len(self.title or "") + len(self.description or "")
+        if text_length > MAX_TEXT_LENGTH:
+            raise ValueError(
+                f"Суммарная длина title и description не должна превышать {MAX_TEXT_LENGTH} "
+                f"символов (получено {text_length})"
             )
         return self
 

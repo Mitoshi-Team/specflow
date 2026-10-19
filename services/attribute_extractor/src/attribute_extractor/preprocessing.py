@@ -34,6 +34,7 @@ from attribute_extractor.constants import (
     SERVICE_NOISE_PATTERNS,
     WHITESPACE_PATTERN,
 )
+from attribute_extractor.errors import TextCleanupInvariantError
 from specflow_contracts import CategorySchema, ProductCard
 
 _JUNK_RE = re.compile(JUNK_CHARS_PATTERN)
@@ -330,7 +331,7 @@ class CardPreprocessor:
         спецификации); явно указанный в карточке язык имеет приоритет над
         автоопределением. После нормализации проверяется инвариант очистки:
         очистка не меняет числа и единицы (``cleaning_invariant_violations``),
-        иначе ``ValueError`` — вход для правил/NER недоверен.
+        иначе ``TextCleanupInvariantError`` — вход для правил/NER недоверен.
         """
         raw_text = card.raw_text
         normalized_text = normalize_text(
@@ -347,7 +348,9 @@ class CardPreprocessor:
             remove_service_noise=self._remove_service_noise,
         )
         if violations:
-            raise ValueError("Нарушен инвариант очистки (Этап 0): " + "; ".join(violations))
+            raise TextCleanupInvariantError(
+                "Нарушен инвариант очистки (Этап 0): " + "; ".join(violations)
+            )
         language = card.language.strip() if card.language else ""
         if not language:
             language = detect_language(normalized_text)

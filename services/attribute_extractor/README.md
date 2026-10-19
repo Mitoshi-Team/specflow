@@ -295,6 +295,9 @@ seller-атрибутах и недостижимые из текста, иск�
 - `src/attribute_extractor/error_handlers.py` — глобальные обработчики
   исключений: все ошибки отдаются в форме `ErrorResponse` (`detail`/`code`/
   `errors`), неизвестные сбои логируются с traceback.
+- `src/attribute_extractor/safe_io.py` — безопасная десериализация данных:
+  ограниченный pickle-загрузчик, разрешающий только встроенные типы (защита
+  от исполнения кода из подменённых файлов).
 - `src/attribute_extractor/rate_limit.py` — ограничение частоты запросов
   (in-memory sliding window → 429 с `Retry-After`).
 - `src/attribute_extractor/extractors/` — `BaseExtractor`, `ExtractorRegistry`,

@@ -5,11 +5,25 @@ from __future__ import annotations
 import json
 import pickle
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pyarrow.parquet as pq
 
 from . import config
+
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    """Unpickler, запрещающий импорт любых классов при десериализации.
+
+    Аналог ``attribute_extractor.safe_io.RestrictedUnpickler`` (EDA —
+    самостоятельный пакет со своими зависимостями, общий модуль недоступен).
+    ``skus.pkl`` — чистые данные (dict/list/str/числа): классы не нужны,
+    поэтому вызов ``find_class`` означает попытку исполнить код из файла.
+    """
+
+    def find_class(self, module: str, name: str) -> Any:
+        raise pickle.UnpicklingError(f"Импорт классов при десериализации запрещён: {module}.{name}")
 
 
 def _cache(name: str) -> Path:
@@ -31,9 +45,14 @@ def load_cards(columns: list[str] | None = None) -> pd.DataFrame:
 
 
 def load_raw_offers() -> dict:
-    """Возвращает распакованный YML-каталог (dict)."""
+    """Возвращает распакованный YML-каталог (dict).
+
+    Файл десериализуется ограниченным unpickler: pickle исполняет код из
+    файла, а датасет может быть подменён/получен извне — разрешены только
+    встроенные типы данных.
+    """
     with open(config.SKUS_PATH, "rb") as f:
-        return pickle.load(f)
+        return _RestrictedUnpickler(f).load()
 
 
 def build_catalog_tables() -> tuple[pd.DataFrame, pd.DataFrame]:

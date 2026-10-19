@@ -338,3 +338,23 @@ def test_conflict_confirmed_flag_counts_only_winning_value() -> None:
     )
     assert result[0].is_confirmed_in_text is False
     assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+
+
+def test_merge_keeps_single_best_value_unconditionally() -> None:
+    """Множество разных значений одного кода схлопывается в лучшее.
+
+    Мёржа безусловна: поле ``allow_multiple`` схемы в кандидаты не попадает
+    и не влияет на выбор (см. модуль ``merging``), поэтому здесь остаётся
+    ровно один кандидат с максимальной уверенностью и флагом конфликта.
+    """
+    result = CandidateMerger().merge(
+        [
+            _candidate("black", confidence=0.6),
+            _candidate("white", confidence=0.9),
+            _candidate("green", confidence=0.7),
+        ]
+    )
+    assert len(result) == 1
+    assert result[0].normalized_value == "white"
+    assert result[0].confidence == pytest.approx(0.9)
+    assert result[0].features == {CONFLICT_FEATURE_KEY: True}

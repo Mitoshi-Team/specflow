@@ -451,3 +451,44 @@ def test_conflict_with_missing_required_marks_partial() -> None:
     assert result.attributes[0].features == {CONFLICT_FEATURE_KEY: True}
     assert result.needs_review is True
     assert result.status == ExtractionStatus.PARTIAL
+
+
+def test_allow_multiple_schema_attribute_still_keeps_single_best_value() -> None:
+    """Этап 8 не ветвится по ``allow_multiple``: атрибут схемы с
+    ``allow_multiple=true`` получает ровно одно лучшее значение."""
+    from attribute_extractor.extractors import ExtractorRegistry
+    from attribute_extractor.preprocessing import generic_schema
+
+    schema = generic_schema().model_copy(
+        update={
+            "category": "Смартфоны",
+            "required_attributes": [
+                Attribute(
+                    code="color",
+                    value_type=AttributeValueType.ENUM,
+                    is_required=True,
+                    allow_multiple=True,
+                ),
+            ],
+        }
+    )
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=ExtractorRegistry([_StubConflictRule()]),
+        preprocessor=CardPreprocessor(schemas=SchemaRegistry([schema])),
+        normalizer=None,
+    )
+    card = ProductCard(
+        product_id="p-allow-multi",
+        title="Смартфон цвет черный и белый",
+        category_name="Смартфоны",
+    )
+    result = pipeline.extract(card)
+
+    assert [candidate.attribute_code for candidate in result.attributes] == ["color"]
+    color = result.attributes[0]
+    assert color.normalized_value == "черный"
+    assert color.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
+    assert color.features == {CONFLICT_FEATURE_KEY: True}
+    assert result.needs_review is True
+    assert result.status == ExtractionStatus.LOW_CONFIDENCE

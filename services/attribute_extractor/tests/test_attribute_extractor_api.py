@@ -117,7 +117,8 @@ def test_extract_skips_card_without_text() -> None:
     body = response.json()
     assert body["status"] == "skipped"
     assert body["attributes"] == []
-    assert body["needs_review"] is False
+    # Пустой текст → ручная проверка (attribute_extractor.md, §6).
+    assert body["needs_review"] is True
 
 
 def test_extract_unexpected_pipeline_error_returns_500(monkeypatch) -> None:

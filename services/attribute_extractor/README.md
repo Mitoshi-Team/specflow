@@ -338,6 +338,19 @@ python services/attribute_extractor/scripts/run_batch.py data/cards.csv --out /t
 `predictions.csv` в формате PredictionRow по флагу `--csv`. Быстрая проба —
 `--max-items 10`, размер части — `--batch-size` (по умолчанию 20).
 
+Метрики качества на gold-наборе — скрипт `scripts/evaluate.py`: P/R/F1
+по каждому атрибуту (макро/микро), coverage, разрез по категориям, доля
+кандидатов ниже порога; сравнение exact-match по `normalized_value`
+на паре `(product_id, attribute_code)`. Без `--predictions` пайплайн
+прогоняется по gold-карточкам заново; `--grounding-stats` дополнительно
+оценивает долю кандидатов, отброшенных фильтром grounding:
+
+```bash
+python services/attribute_extractor/scripts/evaluate.py \
+  --gold services/attribute_extractor/gold/gold.jsonl \
+  --predictions /tmp/preds/predictions.jsonl --out /tmp/metrics.json
+```
+
 ## 7. Эндпоинты
 
 | Метод | Путь | Описание |

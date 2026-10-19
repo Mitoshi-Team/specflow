@@ -12,8 +12,8 @@ import { useBatchExtract } from "../hooks/useBatchExtract";
 import type { BatchSettings } from "../hooks/useBatchExtract";
 import { useFileParser } from "../hooks/useFileParser";
 import { formatFileSize } from "../lib/format";
+import { clearLastBatch, writeLastBatch } from "../lib/lastBatch";
 import type { ProductCardRequest } from "../schemas/api";
-import type { ResultsLocationState } from "./PageResults";
 
 /** Параметры последнего запущенного батча: нужны, чтобы передать на страницу результатов. */
 type SubmittedBatch = {
@@ -74,6 +74,10 @@ export default function PageHome() {
     setFile(null);
     setDescription("");
     setMode("file");
+    // Заодно убираем сохранённый батч: «Новый батч» начинает всё заново,
+    // а страница результатов не должна показывать старые данные
+    // (frontend.md, §8.2).
+    clearLastBatch();
     navigate("/");
   };
 
@@ -89,6 +93,9 @@ export default function PageHome() {
   );
 
   // Переход к результатам при успехе (frontend.md, сценарий 2, шаг 4).
+  // Ответ сохраняем в localStorage, а не передаём через `location.state`:
+  // состояние маршрута теряется при повторном переходе на «Результаты» из
+  // навигации и при перезагрузке страницы.
   useEffect(() => {
     if (
       batch.status !== "success" ||
@@ -97,13 +104,12 @@ export default function PageHome() {
     ) {
       return;
     }
-    navigate("/results", {
-      state: {
-        response: batch.response,
-        threshold: submitted.settings.thresholdOverride,
-        cards: submitted.cards,
-      } satisfies ResultsLocationState,
+    writeLastBatch({
+      response: batch.response,
+      threshold: submitted.settings.thresholdOverride,
+      cards: submitted.cards,
     });
+    navigate("/results");
   }, [batch.status, batch.response, submitted, navigate]);
 
   return (

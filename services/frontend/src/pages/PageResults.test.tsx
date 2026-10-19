@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 
 import "../i18n";
+import { clearLastBatch, writeLastBatch } from "../lib/lastBatch";
+import type { StoredBatch } from "../lib/lastBatch";
 import type { BatchExtractResponse } from "../schemas/api";
 import PageResults from "./PageResults";
-import type { ResultsLocationState } from "./PageResults";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  clearLastBatch();
+});
 
 function batchResponse(): BatchExtractResponse {
   return {
@@ -28,16 +32,19 @@ function batchResponse(): BatchExtractResponse {
   };
 }
 
-function renderPage(state?: ResultsLocationState) {
+function renderPage(batch?: StoredBatch) {
+  if (batch !== undefined) {
+    writeLastBatch(batch);
+  }
   render(
-    <MemoryRouter initialEntries={[{ pathname: "/results", state }]}>
+    <MemoryRouter initialEntries={["/results"]}>
       <PageResults />
     </MemoryRouter>,
   );
 }
 
 describe("PageResults", () => {
-  it("без данных батча показывает пустое состояние", () => {
+  it("без сохранённого батча показывает пустое состояние", () => {
     renderPage();
 
     expect(
@@ -46,7 +53,7 @@ describe("PageResults", () => {
     expect(screen.queryByText("Как читать результаты")).toBeNull();
   });
 
-  it("показывает сводку, легенду статусов и таблицу результатов", () => {
+  it("показывает сохранённый батч, легенду статусов и таблицу результатов", () => {
     renderPage({
       response: batchResponse(),
       threshold: 0.8,
@@ -67,5 +74,27 @@ describe("PageResults", () => {
     renderPage({ response: batchResponse(), threshold: 0.8 });
 
     expect(screen.getByText(/Порог уверенности батча: 0\.8/)).toBeDefined();
+  });
+
+  it("не теряет результаты при переходе между страницами", async () => {
+    writeLastBatch({ response: batchResponse() });
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Link to="/">Домой</Link>
+        <Link to="/results">Результаты</Link>
+        <Routes>
+          <Route path="/" element={<div>Главная</div>} />
+          <Route path="/results" element={<PageResults />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Результаты" }));
+    expect(await screen.findByText("sku-1")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("link", { name: "Домой" }));
+    fireEvent.click(screen.getByRole("link", { name: "Результаты" }));
+
+    expect(await screen.findByText("sku-1")).toBeDefined();
   });
 });

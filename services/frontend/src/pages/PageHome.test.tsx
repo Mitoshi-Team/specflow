@@ -14,6 +14,7 @@ import { useBatchExtract } from "../hooks/useBatchExtract";
 import type { UseBatchExtractResult } from "../hooks/useBatchExtract";
 import { useFileParser } from "../hooks/useFileParser";
 import type { UseFileParserResult } from "../hooks/useFileParser";
+import { readLastBatch, writeLastBatch } from "../lib/lastBatch";
 import type { BatchExtractResponse } from "../schemas/api";
 import PageHome from "./PageHome";
 
@@ -70,13 +71,18 @@ function renderHome() {
 }
 
 beforeEach(() => {
+  // Последний батч живёт в localStorage; изолируем тесты друг от друга.
+  window.localStorage.clear();
   // Результат парсинга зависит от выбранного файла: без файла — idle.
   useFileParserMock.mockImplementation((file) => (file === null ? IDLE : SUCCESS));
   // Батч по умолчанию не запущен; отдельные тесты переопределяют состояние.
   useBatchExtractMock.mockReturnValue(IDLE_BATCH);
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.localStorage.clear();
+});
 
 describe("PageHome", () => {
   it("показывает панель загрузки до выбора файла", () => {
@@ -232,5 +238,30 @@ describe("PageHome", () => {
     fireEvent.click(screen.getByRole("button", { name: "Обработать" }));
 
     expect(await screen.findByText("Страница результатов")).toBeDefined();
+    // Результат сохранён для страницы результатов: держать его в
+    // location.state нельзя — при переходе из навигации он теряется.
+    const stored = readLastBatch();
+    expect(stored?.response).toEqual(response);
+    expect(stored?.cards).toEqual([{ description: "Ручная кофемолка" }]);
+  });
+
+  it("очищает сохранённый батч по кнопке «Новый батч»", () => {
+    writeLastBatch({
+      response: {
+        total: 0,
+        ok: 0,
+        low_confidence: 0,
+        errors: 0,
+        results: [],
+      },
+    });
+    renderHome();
+
+    fireEvent.change(screen.getByLabelText("Выбор файла карточек"), {
+      target: { files: [fakeFile()] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Новый батч" }));
+
+    expect(readLastBatch()).toBeNull();
   });
 });

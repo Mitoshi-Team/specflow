@@ -206,6 +206,13 @@ body {
   line-height: 1.35;
 }
 
+/* Заголовок-прямой потомок панели (без обёртки .panel__header, например
+   «Сводка батча») сам задаёт отступ до содержимого: у .panel__header этот
+   отступ уже есть. */
+.panel > .panel__title {
+  margin-bottom: var(--space-4);
+}
+
 .panel__meta {
   display: flex;
   flex-wrap: wrap;

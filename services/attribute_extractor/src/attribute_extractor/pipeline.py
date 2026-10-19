@@ -85,8 +85,9 @@ class ExtractPipeline:
                 low_confidence_count=0,
                 started=started,
             )
-        # Нарушение инварианта очистки (ValueError) пробрасывается наружу —
-        # API транслирует его в 500 (api_contract.md, 4.1).
+        # Нарушение инварианта очистки (TextCleanupInvariantError) пробрасывается
+        # наружу — API транслирует его в 500 с кодом invariant_violation
+        # (api_contract.md, 4.1).
         preprocessed = self._preprocessor.preprocess(card)
         candidates = self._collect_candidates(preprocessed)
 

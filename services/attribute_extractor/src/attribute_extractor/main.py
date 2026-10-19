@@ -1,9 +1,10 @@
 """Точка входа сервиса извлечения атрибутов (HTTP API — api_contract.md)."""
 
+import logging
 import time
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from attribute_extractor.config import Settings
@@ -17,24 +18,48 @@ from attribute_extractor.constants import (
     EXTRACT_ENDPOINT,
     GENERIC_CATEGORY,
     HEALTH_ENDPOINT,
+    HTTP_400_BAD_REQUEST,
+    HTTP_404_NOT_FOUND,
+    HTTP_422_UNPROCESSABLE_ENTITY,
+    HTTP_500_INTERNAL_SERVER_ERROR,
     INFO_ENDPOINT,
     NER_EXTRACTOR_NAME,
     RULE_EXTRACTOR_NAME,
 )
+from attribute_extractor.error_handlers import register_error_handlers
+from attribute_extractor.errors import BatchSizeMismatchError, CategoryNotFoundError
 from attribute_extractor.extractors import build_default_registry
 from attribute_extractor.extractors.registry import ExtractorRegistry
 from attribute_extractor.pipeline import ExtractPipeline
 from attribute_extractor.preprocessing import generic_schema
+from attribute_extractor.rate_limit import RateLimitMiddleware
 from specflow_contracts import (
     BatchExtractRequest,
     BatchExtractResponse,
     CategorySchema,
+    ErrorResponse,
     ExtractionResult,
     ExtractionStatus,
     HealthResponse,
     ProductCardRequest,
 )
 from specflow_contracts.enums import HealthStatus
+
+logger = logging.getLogger(__name__)
+
+# Коды ошибок, документируемые в OpenAPI для каждого эндпоинта (api_contract.md, 4).
+_EXTRACT_RESPONSES: dict[int | str, dict[str, Any]] = {
+    HTTP_422_UNPROCESSABLE_ENTITY: {"model": ErrorResponse},
+    HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+}
+_BATCH_RESPONSES: dict[int | str, dict[str, Any]] = {
+    HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
+    HTTP_422_UNPROCESSABLE_ENTITY: {"model": ErrorResponse},
+    HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
+}
+_CATEGORY_RESPONSES: dict[int | str, dict[str, Any]] = {
+    HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+}
 
 
 def create_app() -> FastAPI:
@@ -57,32 +82,46 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Глобальная трансляция исключений в ErrorResponse (api_contract.md, 3.8).
+    register_error_handlers(app)
+    if app_settings.rate_limit_requests > 0:
+        # /health не лимитируется: его дёшево и часто пингуют healthcheck'и.
+        app.add_middleware(
+            RateLimitMiddleware,
+            requests=app_settings.rate_limit_requests,
+            window_seconds=app_settings.rate_limit_window_seconds,
+            exclude_paths={f"{app_settings.api_prefix}{HEALTH_ENDPOINT}"},
+        )
 
     @app.post(
         f"{app_settings.api_prefix}{EXTRACT_ENDPOINT}",
         response_model=ExtractionResult,
+        responses=_EXTRACT_RESPONSES,
         tags=["extract"],
     )
     async def extract(request: ProductCardRequest) -> ExtractionResult:
-        """Извлечение атрибутов для одной карточки."""
-        try:
-            return pipeline.extract(request)
-        except ValueError:
-            # Нарушение инварианта очистки текста (Этап 0) → ErrorResponse.
-            raise HTTPException(status_code=500, detail="text cleanup invariant violated") from None
-        except Exception:
-            raise HTTPException(status_code=500, detail="internal server error") from None
+        """Извлечение атрибутов для одной карточки.
+
+        Ошибки транслируются глобальными обработчиками: нарушение инварианта
+        очистки → 500 invariant_violation, прочие сбои → 500 internal_error
+        (api_contract.md, 4.1).
+        """
+        return pipeline.extract(request)
 
     @app.post(
         f"{app_settings.api_prefix}{EXTRACT_BATCH_ENDPOINT}",
         response_model=BatchExtractResponse,
+        responses=_BATCH_RESPONSES,
         tags=["extract"],
     )
     async def extract_batch(request: BatchExtractRequest) -> BatchExtractResponse:
         """Пакетное извлечение с частичным успехом по каждой карточке."""
+        if request.batch_size is not None and request.batch_size != len(request.items):
+            # Несогласованный запрос → 400 (api_contract.md, 4.2).
+            raise BatchSizeMismatchError(request.batch_size, len(request.items))
         started = time.monotonic()
         results: list[ExtractionResult] = []
-        for item in request.items:
+        for index, item in enumerate(request.items):
             try:
                 # threshold_override — локальное переопределение порога для
                 # этого запроса; Settings не мутирует (задача 1.2).
@@ -90,7 +129,13 @@ def create_app() -> FastAPI:
                     pipeline.extract(item, confidence_threshold=request.threshold_override)
                 )
             except Exception:
-                # Ошибка одной карточки не прерывает батч (частичный успех).
+                # Ошибка одной карточки не прерывает батч (частичный успех);
+                # причина фиксируется в логе с traceback (api_contract.md, 5).
+                logger.exception(
+                    "Extraction failed for item %d (product_id=%s)",
+                    index,
+                    item.product_id,
+                )
                 results.append(
                     ExtractionResult(
                         attributes=[],
@@ -134,13 +179,14 @@ def create_app() -> FastAPI:
     @app.get(
         f"{app_settings.api_prefix}{CATEGORIES_ENDPOINT}/{{category}}",
         response_model=CategorySchema,
+        responses=_CATEGORY_RESPONSES,
         tags=["categories"],
     )
     async def category_detail(category: str) -> CategorySchema:
         """Схема категории; 404 ErrorResponse, если не найдена."""
         if category == GENERIC_CATEGORY:
             return generic_schema()
-        raise HTTPException(status_code=404, detail="category not found")
+        raise CategoryNotFoundError(category)
 
     def _health_models() -> tuple[list[str], bool]:
         """Загруженные компоненты и доступность rules по текущим настройкам."""

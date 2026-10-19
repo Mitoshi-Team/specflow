@@ -288,8 +288,15 @@ seller-атрибутах и недостижимые из текста, иск�
 - `src/attribute_extractor/preprocessing.py` — препроцессинг карточки (Этап 0):
   сбор `raw_text`, нормализация (HTML, мусорные символы, служебные вставки и
   водяные знаки), проверка инварианта очистки (`cleaning_invariant_violations`:
-  очистка не меняет числа и единицы, иначе `ValueError`), язык, токенизация,
-  резолв `CategorySchema`.
+  очистка не меняет числа и единицы, иначе `TextCleanupInvariantError`), язык,
+  токенизация, резолв `CategorySchema`.
+- `src/attribute_extractor/errors.py` — доменные исключения API (`ApiError` и
+  наследники: 400/404/429/500 с машиночитаемыми кодами).
+- `src/attribute_extractor/error_handlers.py` — глобальные обработчики
+  исключений: все ошибки отдаются в форме `ErrorResponse` (`detail`/`code`/
+  `errors`), неизвестные сбои логируются с traceback.
+- `src/attribute_extractor/rate_limit.py` — ограничение частоты запросов
+  (in-memory sliding window → 429 с `Retry-After`).
 - `src/attribute_extractor/extractors/` — `BaseExtractor`, `ExtractorRegistry`,
   `RuleExtractor` (✅), `NERExtractor` (пейринг + `ner_score`).
 - `src/attribute_extractor/vector_index.py` — `VectorIndex` (Protocol) и
@@ -342,6 +349,30 @@ python services/attribute_extractor/scripts/run_batch.py data/cards.csv --out /t
 
 Автодокументация OpenAPI: `/docs`, `/redoc`. Форма ответов — по спецификации
 `openspec/specs/api_contract.md` (разделы 3–4).
+
+### Обработка ошибок
+
+Все ответы об ошибках (400/404/405/422/429/500) имеют контрактную форму
+`ErrorResponse` из `specflow_contracts`:
+
+```json
+{"detail": "request validation failed", "code": "validation_error",
+ "errors": [{"msg": "...", "type": "...", "loc": ["body", "title"]}]}
+```
+
+`code` — машиночитаемый `ErrorCode` (`validation_error`, `not_found`,
+`bad_request`, `rate_limited`, `invariant_violation`, `internal_error`, ...),
+по которому клиент градирует ошибки, не парся `detail`. Трансляцией исключений
+в ответы занимаются глобальные обработчики (`error_handlers.py`): эндпоинты
+выбрасывают доменные исключения (`errors.py`), а неизвестные сбои получают
+500 `internal_error` с traceback в логе (клиенту уходит только сводная
+деталь). Ошибки валидации Pydantic → 422 `validation_error` с перечнем полей
+в `errors`; слишком длинный текст карточки (суммарно title + description
+более 20 000 символов) отклоняется с понятной 422.
+
+Rate limiting: не более 60 запросов в минуту на клиента (`EXTRACTOR_RATE_LIMIT_REQUESTS`
+/ `EXTRACTOR_RATE_LIMIT_WINDOW_SECONDS`, `0` — выключить), превышение → 429
+`rate_limited` с заголовком `Retry-After`; `/health` не лимитируется.
 
 В docker-сети сервис доступен API Gateway по адресу
 `http://attribute_extractor:8001`.

@@ -10,6 +10,9 @@ MIN_BATCH_SIZE = 1
 MAX_BATCH_SIZE = 50
 """Максимальное число карточек в одном пакетном запросе."""
 
+MAX_TEXT_LENGTH = 20_000
+"""Максимальная суммарная длина title + description в карточке (soft-limit, api_contract.md, 5)."""
+
 MIN_CONFIDENCE = 0.0
 """Нижняя граница шкалы уверенности."""
 

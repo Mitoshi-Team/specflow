@@ -9,9 +9,10 @@ from specflow_contracts.api import (
     HealthResponse,
     ProductCardRequest,
 )
-from specflow_contracts.constants import MAX_BATCH_SIZE
+from specflow_contracts.constants import MAX_BATCH_SIZE, MAX_TEXT_LENGTH
 from specflow_contracts.domain import AttributeCandidate, ExtractionResult
 from specflow_contracts.enums import (
+    ErrorCode,
     ExtractionMethod,
     ExtractionStatus,
     HealthStatus,
@@ -43,6 +44,36 @@ def test_product_card_request_accepts_seller_attributes_only() -> None:
 def test_product_card_request_rejects_empty_payload(payload: dict) -> None:
     with pytest.raises(ValidationError):
         ProductCardRequest(**payload)
+
+
+def test_product_card_request_accepts_text_at_soft_limit() -> None:
+    """Граница soft-limit: ровно MAX_TEXT_LENGTH символов допускается."""
+    request = ProductCardRequest(description="а" * MAX_TEXT_LENGTH)
+
+    assert request.description == "а" * MAX_TEXT_LENGTH
+
+
+def test_product_card_request_rejects_oversized_text() -> None:
+    """Soft-limit (api_contract.md, 5): слишком длинное описание отклоняется."""
+    with pytest.raises(ValidationError, match="не должна превышать"):
+        ProductCardRequest(description="а" * (MAX_TEXT_LENGTH + 1))
+
+
+def test_product_card_request_soft_limit_counts_title_and_description() -> None:
+    """Лимит считается по сумме title и description, а не по одному полю."""
+    half = MAX_TEXT_LENGTH // 2 + 1
+    payload = {"title": "а" * half, "description": "б" * half}
+
+    with pytest.raises(ValidationError, match="не должна превышать"):
+        ProductCardRequest(**payload)
+
+
+def test_error_code_is_machine_readable() -> None:
+    """ErrorCode — стабильные строковые коды для градации ошибок клиентом."""
+    assert ErrorCode.NOT_FOUND.value == "not_found"
+    assert ErrorCode.VALIDATION_ERROR.value == "validation_error"
+    assert ErrorCode.RATE_LIMITED.value == "rate_limited"
+    assert ErrorCode.INTERNAL_ERROR.value == "internal_error"
 
 
 def test_batch_extract_request_defaults() -> None:

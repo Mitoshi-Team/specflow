@@ -18,6 +18,7 @@ from specflow_contracts.domain import (
 )
 from specflow_contracts.enums import (
     AttributeValueType,
+    ErrorCode,
     ExtractionMethod,
     ExtractionStatus,
     HealthStatus,
@@ -32,6 +33,7 @@ __all__ = [
     "BatchExtractResponse",
     "CategorySchema",
     "ErrorDetail",
+    "ErrorCode",
     "ErrorResponse",
     "ExtractionMethod",
     "ExtractionResult",

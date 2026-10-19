@@ -5,7 +5,7 @@
 не дублировать между модулями.
 """
 
-from specflow_contracts import ExtractionMethod
+from specflow_contracts import ErrorCode, ExtractionMethod
 
 # --- Маршруты ---------------------------------------------------------------
 
@@ -20,6 +20,56 @@ EXTRACT_BATCH_ENDPOINT = "/extract/batch"
 CATEGORIES_ENDPOINT = "/categories"
 INFO_ENDPOINT = "/info"
 CONFIG_ENDPOINT = "/config"
+
+# --- HTTP-статусы -------------------------------------------------------------
+# Именованные константы вместо «сырых» чисел в обработчиках ошибок.
+
+HTTP_400_BAD_REQUEST = 400
+HTTP_404_NOT_FOUND = 404
+HTTP_405_METHOD_NOT_ALLOWED = 405
+HTTP_422_UNPROCESSABLE_ENTITY = 422
+HTTP_429_TOO_MANY_REQUESTS = 429
+HTTP_500_INTERNAL_SERVER_ERROR = 500
+
+# --- Обработка ошибок API (ErrorResponse, api_contract.md, 3.8) ---------------
+
+INTERNAL_ERROR_DETAIL = "internal server error"
+"""Деталь неизвестной (необработанной) ошибки: наружу не утекают внутренности."""
+
+VALIDATION_ERROR_DETAIL = "request validation failed"
+"""Сводная деталь ответа на невалидный запрос; перечень полей — в ``errors``."""
+
+RATE_LIMITED_DETAIL = "too many requests, retry later"
+"""Деталь ответа 429 при превышении лимита частоты запросов."""
+
+BATCH_SIZE_MISMATCH_DETAIL = "batch_size does not match the number of items"
+"""Деталь ответа 400: заявленный ``batch_size`` не совпадает с числом ``items``."""
+
+CATEGORY_NOT_FOUND_DETAIL = "category not found"
+"""Основа детали ответа 404 для неизвестной категории (имя — в хвосте сообщения)."""
+
+HTTP_STATUS_ERROR_CODES = {
+    HTTP_400_BAD_REQUEST: ErrorCode.BAD_REQUEST,
+    HTTP_404_NOT_FOUND: ErrorCode.NOT_FOUND,
+    HTTP_405_METHOD_NOT_ALLOWED: ErrorCode.METHOD_NOT_ALLOWED,
+    HTTP_422_UNPROCESSABLE_ENTITY: ErrorCode.VALIDATION_ERROR,
+    HTTP_429_TOO_MANY_REQUESTS: ErrorCode.RATE_LIMITED,
+}
+"""Соответствие HTTP-статусов машиночитаемым кодам ``ErrorResponse.code``."""
+
+# --- Ограничение частоты запросов (rate limiting) ------------------------------
+
+DEFAULT_RATE_LIMIT_REQUESTS = 60
+"""Число запросов в окне, разрешённых одному клиенту (0 — rate limiting выключен)."""
+
+DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60.0
+"""Размер окна sliding window в секундах."""
+
+RATE_LIMIT_MAX_TRACKED_CLIENTS = 10_000
+"""Максимум отслеживаемых клиентов в памяти; при превышении чистятся протухшие окна.
+
+Защита от неограниченного роста словаря при большом числе различных
+IP-адресов (память rate-limiter не должна утекать)."""
 
 # --- Версии -----------------------------------------------------------------
 

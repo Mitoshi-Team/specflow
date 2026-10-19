@@ -20,6 +20,8 @@ from attribute_extractor.constants import (
     DEFAULT_NER_MODEL_VERSION,
     DEFAULT_NORMALIZATION_ENABLED,
     DEFAULT_PIPELINE_VERSION,
+    DEFAULT_RATE_LIMIT_REQUESTS,
+    DEFAULT_RATE_LIMIT_WINDOW_SECONDS,
     DEFAULT_RULES_VERSION,
     DEFAULT_UNIT_CONVERSION_ENABLED,
     DEFAULT_VECTOR_BACKEND,
@@ -82,6 +84,10 @@ class Settings(BaseSettings):
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     match_threshold: float = Field(DEFAULT_MATCH_THRESHOLD, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE)
     vector_k: int = Field(DEFAULT_VECTOR_K, ge=1)
+
+    # Rate limiting (429); 0 запросов — ограничение выключено.
+    rate_limit_requests: int = Field(DEFAULT_RATE_LIMIT_REQUESTS, ge=0)
+    rate_limit_window_seconds: float = Field(DEFAULT_RATE_LIMIT_WINDOW_SECONDS, gt=0)
 
     # CORS
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])

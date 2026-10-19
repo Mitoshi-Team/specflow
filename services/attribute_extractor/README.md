@@ -157,7 +157,7 @@ class ConfidenceConfig:
     auto_threshold: float          # DEFAULT_CONFIDENCE_THRESHOLD
     review_threshold: float        # REVIEW_CONFIDENCE_THRESHOLD
     match_threshold: float         # DEFAULT_MATCH_THRESHOLD
-    deterministic_confidence: float  # DEFAULT_DETERMINISTIC_CONFIDENCE
+    deterministic_confidence: float  # DETERMINISTIC_CONFIDENCE
 ```
 
 `AttributeCandidate`, `Span`, `ProductCard`, `CategorySchema`, `ExtractionResult`
@@ -176,7 +176,7 @@ def normalize_value(raw: str, field: FieldCatalogEntry | None) -> NormalizedValu
 def rules_fallback(card: ProductCard, schema: CategorySchema, missing: set[str]) -> list[AttributeCandidate]  # ✅ RuleExtractor.extract_for_missing
 def merge(candidates: list[AttributeCandidate]) -> list[AttributeCandidate]    # ✅ CandidateMerger.merge
 def ground(candidates: list[AttributeCandidate], card: CleanedCard) -> list[AttributeCandidate]  # ✅ GroundingValidator.filter
-def score(candidates: list[AttributeCandidate], config: ConfidenceConfig) -> list[AttributeCandidate]  # 🎯
+def score(candidates: list[AttributeCandidate], config: ConfidenceConfig) -> list[AttributeCandidate]  # ✅ ConfidenceCalculator.apply (уверенность по методу)
 def build_result(candidates: list[AttributeCandidate], card: CleanedCard, schema: CategorySchema) -> ExtractionResult  # 🎯
 def is_blocked(name: str, blocklist: FieldBlocklist) -> bool                   # ✅ FieldBlocklist.is_blocked
 ```
@@ -311,6 +311,9 @@ seller-атрибутах и недостижимые из текста, иск�
 - `src/attribute_extractor/slugify.py` — генерация кодов полей (snake_case).
 - `src/attribute_extractor/merging.py` — мёржа кандидатов (Этап 8): группировка
   по `(attribute_code, normalized_value)`, max confidence, конфликт → флаг.
+- `src/attribute_extractor/confidence.py` — расчёт уверенности (Этап 10):
+  `structured`/`rule` → `DETERMINISTIC_CONFIDENCE`, `ner` → `ner_score`
+  (`ConfidenceCalculator`).
 - `src/attribute_extractor/grounding.py` — подтверждение в тексте (Этап 9).
 - `src/attribute_extractor/normalization.py` — нормализация значений (Этап 6):
   регистр, синонимы, единицы, форматирование, enum-валидация.

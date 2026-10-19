@@ -12,6 +12,7 @@ from attribute_extractor.constants import (
     DEFAULT_VECTOR_BACKEND,
     DEFAULT_VECTOR_K,
     DEFAULT_VOCAB_VERSION,
+    DETERMINISTIC_CONFIDENCE,
     REVIEW_CONFIDENCE_THRESHOLD,
     SERVICE_VERSION,
 )
@@ -27,6 +28,7 @@ def test_settings_defaults() -> None:
     assert config.vocab_version == DEFAULT_VOCAB_VERSION
     assert config.default_confidence_threshold == DEFAULT_CONFIDENCE_THRESHOLD
     assert config.review_confidence_threshold == REVIEW_CONFIDENCE_THRESHOLD
+    assert config.deterministic_confidence == DETERMINISTIC_CONFIDENCE
     assert config.max_batch_size == DEFAULT_MAX_BATCH_SIZE
     assert config.grounding_required is True
 
@@ -75,12 +77,14 @@ def test_aggregation_settings_absent_per_spec() -> None:
 def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EXTRACTOR_MAX_BATCH_SIZE", "5")
     monkeypatch.setenv("EXTRACTOR_DEFAULT_CONFIDENCE_THRESHOLD", "0.65")
+    monkeypatch.setenv("EXTRACTOR_DETERMINISTIC_CONFIDENCE", "0.85")
     monkeypatch.setenv("EXTRACTOR_GROUNDING_REQUIRED", "false")
 
     config = Settings(_env_file=None)
 
     assert config.max_batch_size == 5
     assert config.default_confidence_threshold == 0.65
+    assert config.deterministic_confidence == 0.85
     assert config.grounding_required is False
 
 

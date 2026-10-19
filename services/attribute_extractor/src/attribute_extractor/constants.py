@@ -594,8 +594,11 @@ RULE_PROXIMITY_BLOCKED_TAIL_PATTERN = (
 DEFAULT_MATCH_THRESHOLD = 0.75
 """Порог близости при векторном матче поля (match_score >= threshold)."""
 
-DEFAULT_DETERMINISTIC_CONFIDENCE = 0.90
-"""Детерминированная уверенность для rule-кандидатов."""
+DETERMINISTIC_CONFIDENCE = 0.90
+"""Детерминированная уверенность structured/rule-кандидатов (Этап 10)."""
+
+DEFAULT_DETERMINISTIC_CONFIDENCE = DETERMINISTIC_CONFIDENCE
+"""Алиас ``DETERMINISTIC_CONFIDENCE`` (обратная совместимость импортов)."""
 
 AUTO_THRESHOLD = DEFAULT_CONFIDENCE_THRESHOLD
 """Порог автоматического принятия (needs_review=False)."""

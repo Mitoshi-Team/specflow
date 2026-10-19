@@ -645,6 +645,12 @@ RUN_BATCH_CSV_NAME = "predictions.csv"
 RUN_BATCH_CSV_BASE_COLUMNS = ("product_id", "title", "category", "needs_review", "status")
 """Колонки PredictionRow до пар «атрибут/уверенность» (порядок по frontend.md, 4)."""
 
+EVALUATE_THRESHOLD_GRID = (0.70, 0.80, 0.90)
+"""Сетка порога авто-принятия для отчёта о доле ручной проверки."""
+
+EVALUATE_METRICS_JSON_NAME = "metrics.json"
+"""Имя выходного файла с агрегированными метриками (``--out``)."""
+
 DEFAULT_FIELD_CATALOG_PATH = "data/field_catalog.json"
 """Путь к каталогу полей по умолчанию."""
 

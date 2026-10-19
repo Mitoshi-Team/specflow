@@ -268,6 +268,53 @@ def build_report(
     return report
 
 
+def collect_errors(
+    records: list[dict[str, Any]], results: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """FP/FN-примеры по карточкам — разбор ошибок правил.
+
+    FP: предсказанное значение отсутствует в эталоне; FN: эталонное значение
+    не предсказано. Для контекста приводится вторая сторона (эталонные
+    значения для FP, предсказанные для FN) и категория карточки.
+    """
+    categories = {
+        _gold_id(record.get("card", {})): str(record["card"].get("category_name") or "")
+        for record in records
+    }
+    gold = build_gold_map(records)
+    preds = build_pred_map(results)
+    errors: list[dict[str, Any]] = []
+    for product_id in sorted(set(gold) | set(preds)):
+        gold_values = gold.get(product_id, {})
+        pred_values = preds.get(product_id, {})
+        for code in sorted(set(gold_values) | set(pred_values)):
+            expected = sorted(gold_values.get(code, set()))
+            predicted = sorted(pred_values.get(code, set()))
+            for value in sorted(set(predicted) - set(expected)):
+                errors.append(
+                    {
+                        "product_id": product_id,
+                        "category": categories.get(product_id, ""),
+                        "attribute_code": code,
+                        "kind": "fp",
+                        "predicted": value,
+                        "expected": expected,
+                    }
+                )
+            for value in sorted(set(expected) - set(predicted)):
+                errors.append(
+                    {
+                        "product_id": product_id,
+                        "category": categories.get(product_id, ""),
+                        "attribute_code": code,
+                        "kind": "fn",
+                        "expected": value,
+                        "predicted": predicted,
+                    }
+                )
+    return errors
+
+
 def format_report(report: dict[str, Any]) -> str:
     """Человекочитаемая таблица метрик (без сторонних зависимостей)."""
     lines = [
@@ -320,6 +367,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help=f"Путь к metrics.json (по умолчанию {EVALUATE_METRICS_JSON_NAME} не пишется).",
     )
+    parser.add_argument(
+        "--errors",
+        type=Path,
+        default=None,
+        help="Путь к errors.jsonl — FP/FN-примеры по карточкам для разбора правил.",
+    )
     return parser.parse_args(argv)
 
 
@@ -347,6 +400,14 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
         print(f"metrics: {args.out}")
+    if args.errors is not None:
+        errors = collect_errors(records, results)
+        args.errors.parent.mkdir(parents=True, exist_ok=True)
+        args.errors.write_text(
+            "\n".join(json.dumps(entry, ensure_ascii=False) for entry in errors) + "\n",
+            encoding="utf-8",
+        )
+        print(f"errors: {args.errors} ({len(errors)} записей)")
     return 0
 
 

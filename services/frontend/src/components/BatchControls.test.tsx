@@ -55,7 +55,7 @@ describe("BatchControls", () => {
   it("показывает настройки по умолчанию и статус ожидания", () => {
     renderControls();
 
-    expect(input("Размер батча").value).toBe("10");
+    expect(input("Размер батча").value).toBe("1");
     expect(input("Порог уверенности").value).toBe("0.8");
     expect(screen.getByRole("status").textContent).toBe("Ожидает запуска");
     expect(screen.queryByRole("progressbar")).toBeNull();

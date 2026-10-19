@@ -54,10 +54,13 @@ export const CARD_TEXT_MIN_HEIGHT_PX = 160;
 export const CARD_TEXT_MAX_HEIGHT_PX = 480;
 
 /**
- * Размер батча по умолчанию (frontend.md, 9.2: `VITE_DEFAULT_BATCH_SIZE=10`;
- * сценарий 2 — «`batch_size` по умолчанию 10–20, макс. 50»).
+ * Размер батча по умолчанию.
+ *
+ * ⚠️ Отличается от значения в спецификации (frontend.md, 9.2:
+ * `VITE_DEFAULT_BATCH_SIZE=10`; сценарий 2 — «по умолчанию 10–20, макс. 50»):
+ * по требованию считается равным 1, чтобы карточки обрабатывались по одной.
  */
-export const DEFAULT_BATCH_SIZE = 10;
+export const DEFAULT_BATCH_SIZE = 1;
 
 /** Минимальный размер батча (api_contract.md, раздел 2: `batch_size` ∈ [1, 50]). */
 export const MIN_BATCH_SIZE = 1;
@@ -80,3 +83,10 @@ export const MAX_CONFIDENCE_THRESHOLD = 1;
 
 /** Шаг ввода порога уверенности в UI (десятые доли единицы). */
 export const CONFIDENCE_THRESHOLD_STEP = 0.01;
+
+/**
+ * Ключ localStorage для последнего успешного батча (frontend.md, §7:
+ * «useLocalStorage — сохранение последнего батча»). Нужен, чтобы результат не
+ * терялся при переходах между страницами и перезагрузке.
+ */
+export const LAST_BATCH_STORAGE_KEY = "specflow.lastBatch";

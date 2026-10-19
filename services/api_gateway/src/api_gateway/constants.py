@@ -48,3 +48,59 @@ DEFAULT_UPSTREAM_TIMEOUT_SECONDS = 60.0
 
 DEFAULT_UPSTREAM_CONNECT_TIMEOUT_SECONDS = 5.0
 """Таймаут установки соединения с сервисом извлечения атрибутов, в секундах."""
+
+# --- Проксирование публичного API -------------------------------------------
+
+PROXY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+"""HTTP-методы, которые шлюз передаёт в сервис извлечения атрибутов.
+
+Шлюз транспортно-прозрачен: ограничение набора методов не дублируется здесь,
+а накладывается самим сервисом извлечения (он вернёт 405).
+"""
+
+HOP_BY_HOP_HEADERS = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailers",
+        "transfer-encoding",
+        "upgrade",
+    }
+)
+"""Заголовки hop-by-hop (RFC 7230), которые нельзя передавать дальше по цепочке."""
+
+EXCLUDED_PROXY_REQUEST_HEADERS = HOP_BY_HOP_HEADERS | {
+    "host",
+    "content-length",
+    "content-encoding",
+    "accept-encoding",
+}
+"""Заголовки запроса, которые шлюз не пересылает.
+
+``host`` и ``content-length`` формирует httpx по URL и телу;
+``content-encoding``/``accept-encoding`` сбрасываются, чтобы upstream не сжимал
+ответ — шлюз не переупаковывает тело (см. ``PROXY_ACCEPT_ENCODING``).
+"""
+
+PROXY_ACCEPT_ENCODING = "identity"
+"""Кодировка, которую шлюз запрашивает у upstream.
+
+Сжатие отключено намеренно: шлюз передаёт тело как есть и не зависит от того,
+поддерживает ли httpx декодирование brotli/zstd в конкретной сборке.
+"""
+
+EXCLUDED_PROXY_RESPONSE_HEADERS = HOP_BY_HOP_HEADERS | {"content-length", "content-encoding"}
+"""Заголовки ответа, которые шлюз не пересылает.
+
+httpx уже декодировал тело (gzip/deflate/br), поэтому ``content-encoding``
+неактуален, а ``content-length`` Starlette пересчитает по фактическому телу.
+"""
+
+HTTP_502_BAD_GATEWAY = 502
+"""Статус, возвращаемый, когда сервис извлечения атрибутов недоступен."""
+
+UPSTREAM_UNAVAILABLE_DETAIL = "Сервис извлечения атрибутов недоступен"
+"""Деталь ErrorResponse при недоступности upstream (api_contract.md, 3.8)."""

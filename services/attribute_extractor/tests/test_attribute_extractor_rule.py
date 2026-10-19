@@ -62,7 +62,7 @@ def test_diagonal_inch_symbol() -> None:
 
 @pytest.mark.parametrize(
     "fragment",
-    ['Экран 6.7 inch', 'Экран 6.7″', 'Экран 6.7"'],
+    ["Экран 6.7 inch", "Экран 6.7″", 'Экран 6.7"'],
 )
 def test_diagonal_english_and_prime_symbols(fragment: str) -> None:
     """Единицы inch/″/" из спеки дают канон «6,7 дюйм»."""
@@ -398,17 +398,21 @@ def test_model_requires_latin_letter() -> None:
 
 
 def test_processor_after_keyword() -> None:
-    """Значение после «Процессор» — последовательность латинско-цифровых токенов."""
+    """Значение после «Процессор» — последовательность латинско-цифровых токенов.
+
+    Вендор-префикс без семейств «Core/Ryzen» в канон не входит (gold-канон:
+    «Snapdragon 680», а не «Qualcomm Snapdragon 680»).
+    """
     card = ProductCard(description="Процессор Qualcomm Snapdragon 8 Gen 2, 8 ядер")
     candidate = _by_code(_extract(card))["processor"]
-    assert candidate.normalized_value == "Qualcomm Snapdragon 8 Gen 2"
+    assert candidate.normalized_value == "Snapdragon 8 Gen 2"
 
 
 def test_processor_cpu_keyword() -> None:
-    """Английское ключевое слово CPU."""
+    """Английское ключевое слово CPU; A-серия Apple — без вендора."""
     card = ProductCard(description="CPU: Apple A18 Pro")
     candidate = _by_code(_extract(card))["processor"]
-    assert candidate.normalized_value == "Apple A18 Pro"
+    assert candidate.normalized_value == "A18 Pro"
 
 
 # --- Бренд -------------------------------------------------------------------
@@ -520,15 +524,20 @@ def test_model_after_brand_stops_at_cyrillic() -> None:
     assert candidate.normalized_value == "iPhone"
 
 
-def test_keyword_model_beats_brand_model() -> None:
-    """Явный ключ «Модель:» приоритетнее модели после бренда (без конфликта)."""
+def test_brand_model_beats_keyword_model() -> None:
+    """Модель после бренда приоритетнее ключа «Модель:» (gold-канон — по заголовку).
+
+    Ключ в описании часто описывает вариант исполнения («Модель: A2890» при
+    заголовке «iPhone 13 Pro»); два разных значения одного кода создали бы
+    ложный конфликт в мёрдже.
+    """
     card = ProductCard(title="Смартфон Apple iPhone 13 Pro — Модель: A2890")
     models = [
         candidate.normalized_value
         for candidate in _extract(card, _brand_extractor("Apple"))
         if candidate.attribute_code == "model"
     ]
-    assert models == ["A2890"]
+    assert models == ["iPhone 13 Pro"]
 
 
 def test_brand_model_requires_brand_vocab() -> None:

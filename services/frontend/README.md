@@ -8,9 +8,12 @@
 - `src/main.tsx` — точка входа (включая `BrowserRouter`).
 - `src/App.tsx` — корневой компонент с маршрутами.
 - `src/components/` — переиспользуемые компоненты (`AppLayout`, `Header`,
-  `InputModeSwitch`, `FileUpload`, `CardTextInput`, `DataPreview`).
+  `InputModeSwitch`, `FileUpload`, `CardTextInput`, `DataPreview`,
+  `BatchControls`, `ErrorBanner`, `ResultsSummary`, `StatusLegend`,
+  `ResultsTable`, `ExportCsvButton`).
 - `src/pages/` — страницы (`PageHome`, `PageResults`).
-- `src/hooks/` — кастомные хуки (`useFileParser`).
+- `src/hooks/` — кастомные хуки (`useFileParser`, `useBatchExtract`,
+  `useCsvExport`).
 - `src/lib/` — утилиты (`fileParser` — разбор CSV/JSON/TSV, `inputValidation` —
   валидация обязательных полей, `format` — форматирование значений).
 - `src/styles/tokens.css` — токены дизайн-системы (цвета, типографика,
@@ -97,6 +100,27 @@
 `seller_attributes`; `seller_attributes` в CSV/TSV должен быть корректным JSON.
 Разобранные карточки совпадают с типом `ProductCardRequest`
 (`src/schemas/api.ts`).
+
+## Обработка батча и результаты
+
+- `BatchControls` — размер батча и порог уверенности, кнопки «Обработать»,
+  «Сброс» и «Новый батч», прогресс «Обработано X из Y». Запуск, прогресс и
+  ошибки приходят снаружи через `useBatchExtract`.
+- `ErrorBanner` — понятное сообщение ошибки, безопасное следующее действие
+  подбирается по статусу/коду ответа (`apiErrorHintKey`) и разворачиваемые
+  технические детали (HTTP-статус, `detail`, ошибки валидации).
+- `FileUpload` при ошибке разбора показывает не только причину, но и
+  подсказку «что исправить» (`fileUpload.hints.<code>`).
+- При успехе батча `PageHome` переходит на `/results`, передавая ответ, порог
+  и исходные карточки через состояние маршрута (`location.state`).
+- `PageResults` без данных показывает пустое состояние, а с данными — сводку
+  (`ResultsSummary`), легенду статусов (`StatusLegend`) и таблицу
+  (`ResultsTable`) с экспортом CSV (`ExportCsvButton`).
+- `StatusLegend` расшифровывает словами статусы карточек, смысл порога
+  уверенности и служебных колонок: цвет не является единственным носителем
+  смысла (design.md, §8, §11).
+- `ConfidenceBadge` для значений ниже порога показывает видимую пометку
+  «ниже порога», а не только подсветку.
 
 ## Запуск
 

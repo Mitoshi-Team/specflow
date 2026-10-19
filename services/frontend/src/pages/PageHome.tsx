@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -9,8 +9,17 @@ import FileUpload from "../components/FileUpload";
 import InputModeSwitch from "../components/InputModeSwitch";
 import type { InputMode } from "../components/InputModeSwitch";
 import { useBatchExtract } from "../hooks/useBatchExtract";
+import type { BatchSettings } from "../hooks/useBatchExtract";
 import { useFileParser } from "../hooks/useFileParser";
 import { formatFileSize } from "../lib/format";
+import type { ProductCardRequest } from "../schemas/api";
+import type { ResultsLocationState } from "./PageResults";
+
+/** Параметры последнего запущенного батча: нужны, чтобы передать на страницу результатов. */
+type SubmittedBatch = {
+  settings: BatchSettings;
+  cards: ProductCardRequest[];
+};
 
 /**
  * Главная страница: выбор способа загрузки карточек (файл либо текстовое
@@ -19,7 +28,8 @@ import { formatFileSize } from "../lib/format";
  * «Обработка»).
  *
  * Успешный ввод сам по себе ничего не запускает — запуск батча отдельное
- * явное действие (design.md, раздел 7).
+ * явное действие (design.md, раздел 7). При успехе выполняется переход к
+ * результатам (frontend.md, сценарий 2, шаг 4).
  */
 export default function PageHome() {
   const { t } = useTranslation();
@@ -28,6 +38,7 @@ export default function PageHome() {
   const [mode, setMode] = useState<InputMode>("file");
   const [file, setFile] = useState<File | null>(null);
   const [description, setDescription] = useState("");
+  const [submitted, setSubmitted] = useState<SubmittedBatch | null>(null);
   const parser = useFileParser(file);
   const batch = useBatchExtract();
 
@@ -59,11 +70,41 @@ export default function PageHome() {
     // Сброс текущих данных и состояния батча; во время выполнения кнопка
     // заблокирована, поэтому поздний ответ не перезаписывает сброс.
     batch.reset();
+    setSubmitted(null);
     setFile(null);
     setDescription("");
     setMode("file");
     navigate("/");
   };
+
+  // Запоминаем отправленные карточки и настройки: ответ батча несёт только
+  // результат, а странице результатов нужен ещё и порог уверенности, чтобы
+  // пояснить низкоуверенные значения (frontend.md, сценарий 3).
+  const handleStart = useCallback(
+    (items: ProductCardRequest[], settings: BatchSettings): Promise<void> => {
+      setSubmitted({ settings, cards: items });
+      return batch.run(items, settings);
+    },
+    [batch.run],
+  );
+
+  // Переход к результатам при успехе (frontend.md, сценарий 2, шаг 4).
+  useEffect(() => {
+    if (
+      batch.status !== "success" ||
+      batch.response === null ||
+      submitted === null
+    ) {
+      return;
+    }
+    navigate("/results", {
+      state: {
+        response: batch.response,
+        threshold: submitted.settings.thresholdOverride,
+        cards: submitted.cards,
+      } satisfies ResultsLocationState,
+    });
+  }, [batch.status, batch.response, submitted, navigate]);
 
   return (
     <section className="page">
@@ -153,7 +194,7 @@ export default function PageHome() {
           progress={batch.progress}
           error={batch.error}
           response={batch.response}
-          onStart={batch.run}
+          onStart={handleStart}
           onReset={batch.reset}
         />
       </section>

@@ -58,15 +58,20 @@ export default function FileUpload({
   };
 
   let statusText: string;
+  // Подсказка «что делать» для ошибки разбора; в остальных состояниях нет.
+  let errorHint: string | null = null;
   if (status === "success") {
     statusText = t("fileUpload.success", { name: fileName ?? "" });
   } else if (status === "error") {
-    const message = error
-      ? t(`fileUpload.errors.${error.code}`)
-      : t("fileUpload.errors.invalidStructure");
+    // Код ошибки определяет и сообщение, и безопасное следующее действие —
+    // пользователь видит не только «что не так», но и «что исправить»
+    // (design.md, §7: ошибка объясняет происходящее и предлагает действие).
+    const code = error?.code ?? "invalidStructure";
+    const message = t(`fileUpload.errors.${code}`);
     statusText = error?.row
       ? `${message} (${t("fileUpload.row", { row: error.row })})`
       : message;
+    errorHint = t(`fileUpload.hints.${code}`);
   } else if (status === "parsing") {
     statusText = t("fileUpload.parsing");
   } else {
@@ -97,6 +102,9 @@ export default function FileUpload({
               <span className="file-upload__count">
                 {t("fileUpload.cardCount", { total: cardCount })}
               </span>
+            ) : null}
+            {errorHint ? (
+              <span className="file-upload__error-hint">{errorHint}</span>
             ) : null}
           </span>
         )}

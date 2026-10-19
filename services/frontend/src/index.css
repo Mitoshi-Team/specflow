@@ -361,6 +361,16 @@ body {
   color: var(--text-secondary);
 }
 
+/*
+ * Подсказка «что сделать» при ошибке разбора. Видна сразу под сообщением,
+ * чтобы ошибка объясняла происходящее и предлагала действие (design.md, §7).
+ */
+.file-upload__error-hint {
+  max-width: 48ch;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
 .file-upload--parsing .file-upload__zone {
   cursor: progress;
 }
@@ -755,6 +765,13 @@ body {
   color: var(--danger);
 }
 
+/* Безопасное следующее действие — видимое пояснение, а не только «ошибка». */
+.error-banner__hint {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
 .error-banner__summary {
   font-size: var(--text-caption);
   color: var(--text-secondary);
@@ -1131,6 +1148,71 @@ body {
   color: var(--text-primary);
   background: var(--highlight-soft);
   border-radius: var(--radius-control);
+}
+
+/*
+ * Пометка «ниже порога» видима всем, а не только скринридеру: смысл низкой
+ * уверенности читается текстом, цвет — лишь дополнение (design.md, §8, §11).
+ */
+.confidence__note {
+  margin-inline-start: var(--space-1);
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+}
+
+/* --- Легенда статусов (frontend.md, 8.1; design.md, §8) --- */
+
+.status-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+}
+
+.status-legend__title {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.status-legend__threshold {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.status-legend__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.status-legend__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.status-legend__term {
+  flex: none;
+}
+
+.status-legend__description {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.status-legend__notes {
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
 }
 
 /* --- Пустое состояние --- */

@@ -6,19 +6,27 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "../i18n";
+import { useBatchExtract } from "../hooks/useBatchExtract";
+import type { UseBatchExtractResult } from "../hooks/useBatchExtract";
 import { useFileParser } from "../hooks/useFileParser";
 import type { UseFileParserResult } from "../hooks/useFileParser";
+import type { BatchExtractResponse } from "../schemas/api";
 import PageHome from "./PageHome";
 
 vi.mock("../hooks/useFileParser", () => ({
   useFileParser: vi.fn(),
 }));
 
+vi.mock("../hooks/useBatchExtract", () => ({
+  useBatchExtract: vi.fn(),
+}));
+
 const useFileParserMock = vi.mocked(useFileParser);
+const useBatchExtractMock = vi.mocked(useBatchExtract);
 
 const IDLE: UseFileParserResult = {
   status: "idle",
@@ -40,6 +48,15 @@ const SUCCESS: UseFileParserResult = {
   error: null,
 };
 
+const IDLE_BATCH: UseBatchExtractResult = {
+  status: "idle",
+  progress: { processed: 0, total: 0 },
+  error: null,
+  response: null,
+  run: vi.fn().mockResolvedValue(undefined),
+  reset: vi.fn(),
+};
+
 function fakeFile(name = "cards.csv"): File {
   return { name, size: 1024 } as unknown as File;
 }
@@ -55,6 +72,8 @@ function renderHome() {
 beforeEach(() => {
   // Результат парсинга зависит от выбранного файла: без файла — idle.
   useFileParserMock.mockImplementation((file) => (file === null ? IDLE : SUCCESS));
+  // Батч по умолчанию не запущен; отдельные тесты переопределяют состояние.
+  useBatchExtractMock.mockReturnValue(IDLE_BATCH);
 });
 
 afterEach(cleanup);
@@ -180,5 +199,38 @@ describe("PageHome", () => {
 
     expect(screen.queryByText("Предпросмотр данных")).toBeNull();
     expect(screen.getByLabelText("Выбор файла карточек")).toBeDefined();
+  });
+
+  it("переходит на страницу результатов после успешного батча", async () => {
+    const response: BatchExtractResponse = {
+      total: 1,
+      ok: 1,
+      low_confidence: 0,
+      errors: 0,
+      results: [],
+    };
+    useBatchExtractMock.mockReturnValue({
+      ...IDLE_BATCH,
+      status: "success",
+      progress: { processed: 1, total: 1 },
+      response,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<PageHome />} />
+          <Route path="/results" element={<div>Страница результатов</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Текст карточки" }));
+    fireEvent.change(screen.getByLabelText("Описание карточки"), {
+      target: { value: "Ручная кофемолка" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Обработать" }));
+
+    expect(await screen.findByText("Страница результатов")).toBeDefined();
   });
 });

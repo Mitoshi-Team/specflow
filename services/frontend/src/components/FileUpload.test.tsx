@@ -89,6 +89,22 @@ describe("FileUpload", () => {
     expect(status).toContain("Строка 3");
   });
 
+  it("в состоянии ошибки подсказывает, что исправить", () => {
+    renderUpload({ status: "error", error: { code: "unsupportedFormat" } });
+
+    expect(
+      screen.getByText(
+        "Сохраните данные в формате CSV, JSON или TSV и выберите файл снова.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("не показывает подсказку об ошибке вне состояния error", () => {
+    renderUpload({ status: "idle" });
+
+    expect(screen.queryByText(/Сохраните данные в формате/)).toBeNull();
+  });
+
   it("блокирует input при disabled", () => {
     const { input } = renderUpload({ disabled: true });
 

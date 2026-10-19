@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import pickle
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
@@ -31,6 +30,7 @@ from attribute_extractor.gold_sampling import (
     parse_offer_params,
     select_diverse,
 )
+from attribute_extractor.safe_io import load_pickle_file
 
 DEFAULT_DATASET_DIR = Path("EDA/dataset")
 
@@ -42,9 +42,13 @@ def _offer_category_id(offer: dict[str, Any]) -> str:
 
 
 def load_cards(dataset_dir: Path) -> list[dict[str, Any]]:
-    """Собрать карточки из YML-каталога и текстовых описаний."""
-    with open(dataset_dir / "skus.pkl", "rb") as f:
-        raw = pickle.load(f)
+    """Собрать карточки из YML-каталога и текстовых описаний.
+
+    ``skus.pkl`` десериализуется ограниченным unpickler (``safe_io``): файл
+    данных может прийти из внешнего источника, и pickle-объекты исполняют
+    код — разрешены только встроенные типы.
+    """
+    raw = load_pickle_file(dataset_dir / "skus.pkl")
     shop = raw["yml_catalog"]["shop"]
     offers = shop["offers"]["offer"]
     category_names = {

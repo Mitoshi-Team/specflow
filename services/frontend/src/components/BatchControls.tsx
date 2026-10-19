@@ -37,6 +37,16 @@ export type BatchControlsProps = {
 };
 
 /**
+ * Пустое поле — это не ноль: `Number("")` даёт 0, и невведённый порог
+ * выглядел бы валидным (0 входит в диапазон [0; 1]), а батч уходил бы на
+ * сервер с нулевым порогом. Браузер сам отдаёт пустую строку и для ввода,
+ * который не является числом (например, «1,5» или «abc» в `input[type=number]`).
+ */
+function isBlank(value: string): boolean {
+  return value.trim() === "";
+}
+
+/**
  * Настройки батча, кнопки «Обработать»/«Сброс», прогресс «Обработано X из Y»
  * и ошибки API (frontend.md, раздел 6.2; design.md, раздел 7).
  *
@@ -66,10 +76,12 @@ export default function BatchControls({
   const batchSize = Number(batchSizeValue);
   const threshold = Number(thresholdValue);
   const batchSizeValid =
+    !isBlank(batchSizeValue) &&
     Number.isInteger(batchSize) &&
     batchSize >= MIN_BATCH_SIZE &&
     batchSize <= MAX_BATCH_SIZE;
   const thresholdValid =
+    !isBlank(thresholdValue) &&
     Number.isFinite(threshold) &&
     threshold >= MIN_CONFIDENCE_THRESHOLD &&
     threshold <= MAX_CONFIDENCE_THRESHOLD;

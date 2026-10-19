@@ -93,6 +93,42 @@ describe("BatchControls", () => {
     ).toBeDefined();
   });
 
+  it("считает очищенный размер батча невалидным", () => {
+    renderControls();
+
+    fireEvent.change(input("Размер батча"), { target: { value: "" } });
+
+    expect(input("Размер батча").getAttribute("aria-invalid")).toBe("true");
+    expect(
+      screen.getByText("Значение вне диапазона от 1 до 50"),
+    ).toBeDefined();
+  });
+
+  it("блокирует запуск и показывает ошибку при пороге вне диапазона", () => {
+    renderControls();
+
+    fireEvent.change(input("Порог уверенности"), { target: { value: "1.5" } });
+
+    expect(button("Обработать").disabled).toBe(true);
+    expect(input("Порог уверенности").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("Значение вне диапазона от 0 до 1")).toBeDefined();
+  });
+
+  it("считает очищенный порог невалидным, а не нулевым", () => {
+    const { onStart } = renderControls();
+
+    // Пустое поле браузер отдаёт и при вводе мусора в input[type=number];
+    // без проверки Number("") === 0 делал бы такой порог валидным.
+    fireEvent.change(input("Порог уверенности"), { target: { value: "" } });
+
+    expect(input("Порог уверенности").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("Значение вне диапазона от 0 до 1")).toBeDefined();
+    expect(button("Обработать").disabled).toBe(true);
+
+    fireEvent.click(button("Обработать"));
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
   it("в состоянии выполнения блокирует контролы и показывает прогресс", () => {
     const status: BatchStatus = "running";
     renderControls({

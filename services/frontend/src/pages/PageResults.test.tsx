@@ -61,7 +61,11 @@ describe("PageResults", () => {
     });
 
     expect(screen.getByText("Сводка батча")).toBeDefined();
-    expect(screen.getByText("Как читать результаты")).toBeDefined();
+    const legendToggle = screen.getByRole("button", {
+      name: "Как читать результаты",
+    });
+    expect(legendToggle).toBeDefined();
+    expect(legendToggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText("sku-1")).toBeDefined();
     expect(
       screen.getByRole("button", {
@@ -72,6 +76,11 @@ describe("PageResults", () => {
 
   it("передаёт порог в пояснение низкоуверенных значений", () => {
     renderPage({ response: batchResponse(), threshold: 0.8 });
+
+    // Легенда свёрнута по умолчанию — раскрываем её кликом по заголовку.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Как читать результаты" }),
+    );
 
     expect(screen.getByText(/Порог уверенности батча: 0\.8/)).toBeDefined();
   });

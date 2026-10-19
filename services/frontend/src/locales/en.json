@@ -29,7 +29,17 @@
     "progress": "Processed {{processed}} of {{total}}"
   },
   "errorBanner": {
-    "details": "Technical details"
+    "details": "Technical details",
+    "hints": {
+      "network": "Check the server connection and try again.",
+      "rateLimited": "Too many requests. Wait a moment and retry.",
+      "validation": "Check the card data and batch settings, then retry.",
+      "badRequest": "The server rejected the request. Check the parameters and retry.",
+      "notFound": "The requested resource was not found. Reload the page and try again.",
+      "server": "Retry later. If the error persists, contact the administrator.",
+      "invalidResponse": "The server returned an unexpected response. Retry later.",
+      "generic": "Retry the request. If the error persists, check the data and contact the administrator."
+    }
   },
   "fileUpload": {
     "inputLabel": "Product cards file selection",
@@ -50,6 +60,17 @@
       "invalidSellerAttributes": "Invalid JSON in the seller_attributes field",
       "noContent": "The row has no title, description or seller_attributes",
       "noCards": "The file contains no cards"
+    },
+    "hints": {
+      "emptyFile": "Choose a file that contains at least one card.",
+      "unsupportedFormat": "Save the data as CSV, JSON or TSV and select the file again.",
+      "fileTooLarge": "Split the file into several smaller parts.",
+      "readError": "Check access to the file and try selecting it again.",
+      "invalidJson": "Fix the JSON syntax: check quotes, commas and brackets.",
+      "invalidStructure": "An array of objects is expected; for CSV — a header row and at least one data row.",
+      "invalidSellerAttributes": "The seller_attributes field must contain a valid JSON object, e.g. {\"brand\": \"Bosch\"}.",
+      "noContent": "Add at least one of the title, description or seller_attributes fields to the row.",
+      "noCards": "Make sure the file contains data: card rows or a non-empty JSON array."
     }
   },
   "upload": {
@@ -119,6 +140,7 @@
   },
   "results": {
     "summary": {
+      "title": "Batch summary",
       "total": "Cards processed",
       "ok": "Succeeded",
       "lowConfidence": "Low confidence",
@@ -127,6 +149,20 @@
       "batchId": "Batch",
       "pipelineVersion": "Pipeline version",
       "processingTime": "Processing time, ms"
+    },
+    "hints": {
+      "title": "How to read the results",
+      "threshold": "Batch confidence threshold: {{threshold}}. Values below the threshold are highlighted and require review.",
+      "thresholdUnknown": "Values below the confidence threshold are highlighted and require review.",
+      "columnLowConfidence": "\"Below threshold\" — how many attributes of the card have confidence below the batch threshold.",
+      "columnNeedsReview": "\"Review\" — the card requires manual review due to low confidence or incomplete attributes.",
+      "status": {
+        "ok": "All required attributes are extracted and confirmed in the text.",
+        "low_confidence": "Some values are below the threshold — review them manually before use.",
+        "partial": "Only some of the required attributes were extracted.",
+        "error": "Processing the card failed; the card can be processed again.",
+        "skipped": "The card was skipped — no text was found to analyze."
+      }
     },
     "status": {
       "ok": "Succeeded",

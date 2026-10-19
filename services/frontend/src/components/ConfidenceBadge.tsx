@@ -15,9 +15,11 @@ export type ConfidenceBadgeProps = {
  * Бейдж уверенности (frontend.md, 6.2 `ConfidenceBadge`; design.md, §8).
  *
  * Числовое значение показывается всегда. При заданном пороге значение ниже
- * порога получает нейтральную подсветку и текстовую пометку «ниже порога»:
- * смысл не кодируется только цветом (design.md, §8, §11). Низкая уверенность
- * не помечается красным — это повод для проверки, а не ошибка (design.md, §8).
+ * порога получает нейтральную подсветку и видимую текстовую пометку «ниже
+ * порога»: смысл не кодируется только цветом (design.md, §8, §11). Пометка
+ * видима, а не только для скринридера, чтобы объяснение было доступно всем.
+ * Низкая уверенность не помечается красным — это повод для проверки, а не
+ * ошибка (design.md, §8).
  */
 export default function ConfidenceBadge({
   confidence,
@@ -30,7 +32,7 @@ export default function ConfidenceBadge({
     <span className={`confidence${isLow ? " confidence--low" : ""}`}>
       {confidence}
       {isLow ? (
-        <span className="sr-only">
+        <span className="confidence__note">
           {" "}
           {t("results.table.attributes.confidenceLow")}
         </span>

@@ -4,9 +4,66 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { ApiError } from "../api";
 import "../i18n";
-import ErrorBanner from "./ErrorBanner";
+import ErrorBanner, { apiErrorHintKey } from "./ErrorBanner";
 
 afterEach(cleanup);
+
+describe("apiErrorHintKey", () => {
+  it("определяет сетевую ошибку", () => {
+    expect(
+      apiErrorHintKey(
+        new ApiError({ status: 0, message: "api.errors.network" }),
+      ),
+    ).toBe("errorBanner.hints.network");
+  });
+
+  it("определяет ограничение частоты по коду и по статусу", () => {
+    expect(
+      apiErrorHintKey(
+        new ApiError({
+          status: 429,
+          message: "api.errors.http",
+          code: "rate_limited",
+        }),
+      ),
+    ).toBe("errorBanner.hints.rateLimited");
+    expect(
+      apiErrorHintKey(new ApiError({ status: 429, message: "api.errors.http" })),
+    ).toBe("errorBanner.hints.rateLimited");
+  });
+
+  it("определяет ошибку валидации и некорректный запрос", () => {
+    expect(
+      apiErrorHintKey(new ApiError({ status: 422, message: "api.errors.http" })),
+    ).toBe("errorBanner.hints.validation");
+    expect(
+      apiErrorHintKey(new ApiError({ status: 400, message: "api.errors.http" })),
+    ).toBe("errorBanner.hints.badRequest");
+  });
+
+  it("определяет серверную ошибку по статусу и по коду", () => {
+    expect(
+      apiErrorHintKey(new ApiError({ status: 503, message: "api.errors.http" })),
+    ).toBe("errorBanner.hints.server");
+    expect(
+      apiErrorHintKey(
+        new ApiError({
+          status: 500,
+          message: "api.errors.http",
+          code: "invariant_violation",
+        }),
+      ),
+    ).toBe("errorBanner.hints.server");
+  });
+
+  it("определяет некорректный ответ сервера", () => {
+    expect(
+      apiErrorHintKey(
+        new ApiError({ status: 200, message: "api.errors.invalidResponse" }),
+      ),
+    ).toBe("errorBanner.hints.invalidResponse");
+  });
+});
 
 describe("ErrorBanner", () => {
   it("показывает переведённое сообщение ошибки", () => {
@@ -47,5 +104,19 @@ describe("ErrorBanner", () => {
       "Не удалось соединиться с сервером",
     );
     expect(screen.queryByText("Технические детали")).toBeNull();
+  });
+
+  it("показывает безопасное следующее действие для ошибки", () => {
+    render(
+      <ErrorBanner
+        error={new ApiError({ status: 500, message: "api.errors.http" })}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Повторите запрос позже. Если ошибка повторяется, сообщите администратору.",
+      ),
+    ).toBeDefined();
   });
 });

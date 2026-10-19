@@ -201,6 +201,62 @@ def test_main_rerun_mode_missing_predictions(tmp_path: Path) -> None:
     assert "grounding" not in report
 
 
+def test_collect_errors_lists_fp_and_fn() -> None:
+    records = [
+        {
+            "card": {
+                "sku_id": "p1",
+                "title": "t",
+                "description": "",
+                "category_id": "761",
+                "category_name": "Смартфоны",
+            },
+            "expected": [{"attribute_code": "brand", "normalized_value": "Apple"}],
+            "notes": "",
+        }
+    ]
+    results = [_result("p1", [("brand", "Samsung", 0.9), ("color", "черный", 0.9)])]
+    errors = evaluate.collect_errors(records, [r.model_dump() for r in results])
+    fp = [entry for entry in errors if entry["kind"] == "fp"]
+    fn = [entry for entry in errors if entry["kind"] == "fn"]
+    assert [(e["attribute_code"], e["predicted"]) for e in fp] == [
+        ("brand", "Samsung"),
+        ("color", "черный"),
+    ]
+    assert fp[0]["expected"] == ["Apple"]
+    assert [(e["attribute_code"], e["expected"]) for e in fn] == [("brand", "Apple")]
+    assert fn[0]["predicted"] == ["Samsung"]
+    assert {e["category"] for e in errors} == {"Смартфоны"}
+
+
+def test_main_writes_errors_file(tmp_path: Path) -> None:
+    gold = tmp_path / "gold.jsonl"
+    predictions = tmp_path / "predictions.jsonl"
+    errors_path = tmp_path / "errors.jsonl"
+    _write_gold(gold)
+    _dump_results(
+        [
+            _result("p1", [("brand", "Apple", 0.9), ("storage", "256 ГБ", 0.9)]),
+            _result("p2", []),
+        ],
+        predictions,
+    )
+    exit_code = evaluate.main(
+        [
+            "--gold",
+            str(gold),
+            "--predictions",
+            str(predictions),
+            "--errors",
+            str(errors_path),
+        ]
+    )
+    assert exit_code == 0
+    errors = [json.loads(line) for line in errors_path.read_text(encoding="utf-8").splitlines()]
+    kinds = {entry["kind"] for entry in errors}
+    assert kinds == {"fp", "fn"}
+
+
 def test_main_missing_gold_fails(tmp_path: Path) -> None:
     exit_code = evaluate.main(["--gold", str(tmp_path / "absent.jsonl")])
     assert exit_code == 1

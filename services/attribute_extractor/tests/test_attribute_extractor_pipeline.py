@@ -10,8 +10,11 @@ from __future__ import annotations
 import json
 from pathlib import Path as FsPath
 
+import pytest
+
 from attribute_extractor.config import Settings
 from attribute_extractor.constants import (
+    AUTO_THRESHOLD,
     CONFLICT_FEATURE_KEY,
     DEFAULT_DETERMINISTIC_CONFIDENCE,
     REVIEW_THRESHOLD,
@@ -84,7 +87,9 @@ def test_empty_card_is_skipped() -> None:
     result = _default_pipeline().extract(card)
     assert result.status == ExtractionStatus.SKIPPED
     assert result.attributes == []
-    assert result.needs_review is False
+    # Подтвердить значения без текста нельзя — карточка на ручной проверке
+    # (attribute_extractor.md, §6: пустой список, needs_review=true).
+    assert result.needs_review is True
 
 
 def test_disabled_rules_yields_no_candidates() -> None:
@@ -492,3 +497,83 @@ def test_allow_multiple_schema_attribute_still_keeps_single_best_value() -> None
     assert color.features == {CONFLICT_FEATURE_KEY: True}
     assert result.needs_review is True
     assert result.status == ExtractionStatus.LOW_CONFIDENCE
+
+
+class _ScoredStubNER(BaseExtractor):
+    """FAKE NER: доступен, отдаёт бренд с заданной модельной оценкой."""
+
+    name = NER_EXTRACTOR_NAME
+    priority = 10
+
+    def __init__(self, ner_score: float) -> None:
+        self._ner_score = ner_score
+
+    def is_available(self) -> bool:
+        return True
+
+    def extract(self, card: ProductCard, schema) -> list[AttributeCandidate]:
+        span = Span(field=SpanField.TITLE, text="realme", start=9, end=15)
+        return [
+            AttributeCandidate(
+                attribute_code="brand",
+                raw_value="realme",
+                normalized_value="realme",
+                confidence=1.0,
+                extraction_method=ExtractionMethod.NER,
+                is_confirmed_in_text=True,
+                source_spans=[span],
+                evidence_text="realme",
+                ner_score=self._ner_score,
+            )
+        ]
+
+
+def _brand_only_schema_registry() -> SchemaRegistry:
+    from attribute_extractor.preprocessing import generic_schema
+
+    schema = generic_schema().model_copy(
+        update={
+            "category": "Смартфоны",
+            "required_attributes": [
+                Attribute(code="brand", value_type=AttributeValueType.STRING, is_required=True),
+            ],
+        }
+    )
+    return SchemaRegistry([schema])
+
+
+@pytest.mark.parametrize(
+    ("ner_score", "expected_status"),
+    [
+        # Границы Этапа 10 (attribute_extractor.md): AUTO_THRESHOLD включительно
+        # и выше — ok; чуть ниже AUTO, ровно REVIEW и ниже REVIEW — low_confidence.
+        (AUTO_THRESHOLD, ExtractionStatus.OK),
+        (0.99, ExtractionStatus.OK),
+        (AUTO_THRESHOLD - 0.01, ExtractionStatus.LOW_CONFIDENCE),
+        (REVIEW_THRESHOLD, ExtractionStatus.LOW_CONFIDENCE),
+        (REVIEW_THRESHOLD - 0.01, ExtractionStatus.LOW_CONFIDENCE),
+    ],
+)
+def test_status_follows_confidence_thresholds(
+    ner_score: float, expected_status: ExtractionStatus
+) -> None:
+    """``needs_review``/``status`` определяются уверенностью по порогам Этапа 10."""
+    from attribute_extractor.extractors import ExtractorRegistry
+
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=ExtractorRegistry([_ScoredStubNER(ner_score)]),
+        preprocessor=CardPreprocessor(schemas=_brand_only_schema_registry()),
+        normalizer=None,
+    )
+    result = pipeline.extract(_card_from_gold(RECORD_1))
+
+    brand = {candidate.attribute_code: candidate for candidate in result.attributes}["brand"]
+    assert brand.confidence == pytest.approx(ner_score)
+    assert result.status == expected_status
+    if expected_status is ExtractionStatus.OK:
+        assert result.needs_review is False
+        assert result.low_confidence_count == 0
+    else:
+        assert result.needs_review is True
+        assert result.low_confidence_count == 1

@@ -84,11 +84,14 @@ class ExtractPipeline:
         """
         started = time.monotonic()
         if not _has_text(card):
+            # Нет текста — подтвердить значения нельзя, карточка уходит на
+            # ручную проверку (attribute_extractor.md, §6: пустой список,
+            # needs_review=true, статус skipped).
             return self._finish(
                 card,
                 attributes=[],
                 status=ExtractionStatus.SKIPPED,
-                needs_review=False,
+                needs_review=True,
                 low_confidence_count=0,
                 started=started,
             )

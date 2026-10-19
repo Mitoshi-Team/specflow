@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
+from attribute_extractor import constants
 from attribute_extractor.config import Settings
 from attribute_extractor.constants import (
     DEFAULT_CONFIDENCE_THRESHOLD,
@@ -13,6 +14,8 @@ from attribute_extractor.constants import (
     DEFAULT_VECTOR_K,
     DEFAULT_VOCAB_VERSION,
     DETERMINISTIC_CONFIDENCE,
+    MAX_CONFIDENCE,
+    MIN_CONFIDENCE,
     REVIEW_CONFIDENCE_THRESHOLD,
     SERVICE_VERSION,
 )
@@ -72,6 +75,35 @@ def test_aggregation_settings_absent_per_spec() -> None:
     assert not hasattr(config, "method_weights")
     assert not hasattr(config, "hybrid_strategy")
     assert not hasattr(config, "enable_llm")
+
+
+def test_aggregation_constants_absent_per_spec() -> None:
+    """Веса методов, три штрафа и LLM-блок удалены change-листом (задача 4.1)."""
+    removed = (
+        "DEFAULT_METHOD_WEIGHTS",
+        "DEFAULT_METHOD_WEIGHT",
+        "MERGED_METHOD",
+        "DEFAULT_HYBRID_STRATEGY",
+        "ENUM_OUT_OF_VOCAB_PENALTY",
+        "CONFLICTING_VALUES_PENALTY",
+        "WEAK_EVIDENCE_PENALTY",
+        "DEFAULT_ENABLE_LLM",
+        "DEFAULT_LLM_PROVIDER",
+        "DEFAULT_LLM_MODEL",
+        "DEFAULT_LLM_TEMPERATURE",
+        "DEFAULT_LLM_MAX_TOKENS",
+        "DEFAULT_LLM_TIMEOUT_SECONDS",
+        "LLM_EXTRACTOR_NAME",
+        "LLM_EXTRACTOR_PRIORITY",
+    )
+    for name in removed:
+        assert not hasattr(constants, name), f"{name} should be removed per task 4.1"
+
+
+def test_deterministic_confidence_present_and_in_range() -> None:
+    """DETERMINISTIC_CONFIDENCE — константа structured/rule-кандидатов в пределах шкалы."""
+    assert MIN_CONFIDENCE <= DETERMINISTIC_CONFIDENCE <= MAX_CONFIDENCE
+    assert constants.DEFAULT_DETERMINISTIC_CONFIDENCE == DETERMINISTIC_CONFIDENCE
 
 
 def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:

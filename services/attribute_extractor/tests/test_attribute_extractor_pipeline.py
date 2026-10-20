@@ -279,6 +279,68 @@ def test_rules_fallback_skips_when_ner_closed_all_required() -> None:
     assert result.status == ExtractionStatus.OK
 
 
+def test_rules_fallback_uses_schema_loaded_from_artifact(tmp_path) -> None:
+    """Этап 7 работает со схемой, загруженной из JSON-артефакта сборщика.
+
+    Отделяет wiring (``SchemaRegistry.from_file`` → ``CardPreprocessor`` →
+    rules-fallback) от самой логики fallback, проверяемой на реестре в памяти:
+    обязательные поля из артефакта управляют каскадом так же, как и
+    зарегистрированные напрямую.
+    """
+    artifact = tmp_path / "category_schemas.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "version": "1.0.0",
+                "schemas": [
+                    {
+                        "category": "Смартфоны",
+                        "category_id": RECORD_1["card"]["category_id"],
+                        "schema_version": "1.0.0",
+                        "required_attributes": [
+                            {"code": "brand", "value_type": "string", "is_required": True},
+                            {
+                                "code": "storage",
+                                "value_type": "unit_value",
+                                "is_required": True,
+                                "unit": "ГБ",
+                            },
+                        ],
+                        "optional_attributes": [],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    card = _card_from_gold(RECORD_1)
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=_registry_with_stub(),
+        preprocessor=CardPreprocessor(schemas=SchemaRegistry.from_file(artifact)),
+        normalizer=None,
+    )
+    result = pipeline.extract(card)
+
+    by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
+    assert by_code["brand"].extraction_method == ExtractionMethod.NER
+    # storage обязателен по схеме из артефакта → закрывается rules-fallback.
+    assert by_code["storage"].extraction_method == ExtractionMethod.RULE
+    assert by_code["storage"].normalized_value.endswith("ГБ")
+
+    # Пустой реестр (артефакт без схем) → обязательных нет, fallback не запускается.
+    empty_artifact = tmp_path / "empty.json"
+    empty_artifact.write_text(json.dumps({"version": "1.0.0", "schemas": []}), encoding="utf-8")
+    generic_result = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=_registry_with_stub(),
+        preprocessor=CardPreprocessor(schemas=SchemaRegistry.from_file(empty_artifact)),
+        normalizer=None,
+    ).extract(card)
+    assert {candidate.attribute_code for candidate in generic_result.attributes} == {"brand"}
+
+
 def _registry_with_stub():
     from attribute_extractor.extractors import ExtractorRegistry
     from attribute_extractor.extractors.rule import RuleExtractor

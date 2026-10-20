@@ -32,6 +32,10 @@ dev = [
     "pytest>=8.3",
     "httpx2>=2.13",
     "ruff>=0.16",
+    # Parquet-фикстуры для тестов сборки схем категорий и оффлайн-скриптов
+    # (build_field_catalog/build_category_schemas читают EDA/cache/*.parquet).
+    "pandas>=2.2",
+    "pyarrow>=17",
 ]
 
 [tool.uv]

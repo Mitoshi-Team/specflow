@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from attribute_extractor.constants import (
     API_PREFIX,
+    DEFAULT_CATEGORY_SCHEMAS_PATH,
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_ENABLE_NER,
@@ -47,6 +48,10 @@ class Settings(BaseSettings):
 
     app_name: str = "SpecFlow Attribute Extractor"
     api_prefix: str = API_PREFIX
+
+    # Реестр схем категорий: артефакт scripts/build_category_schemas.py,
+    # загружается на старте; отсутствие файла — штатный generic-fallback.
+    category_schemas_path: str = DEFAULT_CATEGORY_SCHEMAS_PATH
 
     # Версии сервиса, пайплайна и компонентов (используются в трассировке).
     service_version: str = SERVICE_VERSION

@@ -107,6 +107,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      # Артефакты каталога/реестра схем с хоста (data/category_schemas.json
+      # собирается scripts/build_category_schemas.py; без него — generic-fallback).
+      - ./data:/app/data
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import sys, urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health', timeout=2); sys.exit(0)\" || exit 1"]
       interval: 10s

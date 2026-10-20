@@ -16,6 +16,7 @@ Rules-fallback (Этап 7) после NER заполняет только те 
 
 from __future__ import annotations
 
+import logging
 import time
 
 from attribute_extractor.confidence import ConfidenceCalculator
@@ -38,6 +39,8 @@ from specflow_contracts import (
     ExtractionStatus,
     ProductCard,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractPipeline:
@@ -177,7 +180,15 @@ class ExtractPipeline:
             return []
         try:
             return list(ner.extract(card, schema))
-        except Exception:
+        except Exception:  # noqa: BLE001 — деградация по дизайну (сценарий 3), но с логом
+            # Сбой NER не должен ронять пайплайн: карточка уходит на правила,
+            # но причина фиксируется с traceback — молчаливая деградация
+            # маскировала бы отказ модели на всей выборке.
+            logger.warning(
+                "NER-извлечение не удалось (product_id=%s); продолжаем на правилах",
+                card.product_id,
+                exc_info=True,
+            )
             return []
 
     def _finish(

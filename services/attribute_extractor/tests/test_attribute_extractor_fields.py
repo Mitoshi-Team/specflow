@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from attribute_extractor import fields, slugify, vector_index
 from attribute_extractor.catalog_store import CatalogStore
 
@@ -112,3 +114,27 @@ def test_field_catalog_from_store_reads_synonyms(tmp_path):
     entry = catalog.get("ram")
     assert entry is not None
     assert entry.synonyms == ["ОЗУ"]
+
+
+def test_persist_new_field_failure_logs_and_keeps_match(tmp_path, monkeypatch, caplog):
+    """Сбой записи нового поля не роняет резолв, но виден в логе (регрессия к
+    хакатон-ревью: раньше ``except Exception: pass`` терял поле молча)."""
+    store = _store(tmp_path)
+
+    def _failing_save(data):
+        raise OSError("диск недоступен")
+
+    monkeypatch.setattr(store, "save_catalog", _failing_save)
+    r = fields.FieldResolver(store=store)
+    with caplog.at_level(logging.ERROR, logger="attribute_extractor.fields"):
+        m = r.resolve("объём памяти")
+    assert m.is_new_field is True
+    assert any("obem_pamyati" in record.getMessage() for record in caplog.records)
+
+
+def test_field_resolver_survives_corrupt_catalog_file(tmp_path):
+    """Битый файл каталога деградирует пустым каталогом, резолв не падает."""
+    store = _store(tmp_path)
+    store.catalog_path.write_text("{битый json", encoding="utf-8")
+    r = fields.FieldResolver(store=store)
+    assert r.catalog.all() == []

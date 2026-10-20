@@ -9,11 +9,14 @@ in-memory реестр справочников, наследуемый норм
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from attribute_extractor.constants import DEFAULT_BRAND_VOCAB_PATH, DEFAULT_VOCAB_VERSION
+
+logger = logging.getLogger(__name__)
 
 
 class AttributeVocab(BaseModel):
@@ -141,9 +144,16 @@ def load_brand_vocab(path: str | Path = DEFAULT_BRAND_VOCAB_PATH) -> BrandVocab 
     Ассет собирается ``scripts/build_brand_vocab.py`` и хранится в репозитории
     (domain-model.md §3.8). Отсутствие файла — штатная ситуация при первом
     прогоне: возвращает ``None``, экстрактор работает без брендовых правил.
+    Битый или недоступный ассет деградирует так же (предсказуемое поведение
+    внешней зависимости), но с ERROR-логом: порча файла не должна ронять
+    сборку реестра (``build_default_registry`` → старт сервиса), однако и не
+    должна пройти молча.
     """
     try:
         with Path(path).open(encoding="utf-8") as file:
             return BrandVocab.model_validate(json.load(file))
     except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValidationError):
+        logger.exception("Бренд-словарь в %s не загрузился; работаем без брендовых правил", path)
         return None

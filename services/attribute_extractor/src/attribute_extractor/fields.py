@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from attribute_extractor import slugify
@@ -13,6 +14,8 @@ from attribute_extractor.constants import (
     DEFAULT_VECTOR_K,
 )
 from attribute_extractor.vector_index import LexicalVectorIndex, VectorIndex
+
+logger = logging.getLogger(__name__)
 
 FIELD_TEXT_SEPARATOR = " ; "
 """Разделитель имени поля и синонимов при сборке текста для индексации."""
@@ -169,5 +172,13 @@ class FieldResolver:
                 entries.append({"code": code, "name_ru": characteristic, "is_new_field": True})
                 data["entries"] = entries
                 self.store.save_catalog(data)
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 — персистентность best effort, отказ не должен ронять резолв
+            # Сбой записи не должен прерывать разрешение карточки (новое поле
+            # уже в памяти), но обязан фиксироваться с traceback: раньше поле
+            # терялось молча при следующем рестарте.
+            logger.exception(
+                "Не удалось сохранить новое поле %s (%r) в каталог %s",
+                code,
+                characteristic,
+                self.store.catalog_path,
+            )

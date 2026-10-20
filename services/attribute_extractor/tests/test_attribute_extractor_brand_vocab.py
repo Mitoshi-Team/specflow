@@ -30,6 +30,49 @@ def test_load_brand_vocab_missing_file_returns_none(tmp_path: Path) -> None:
     assert load_brand_vocab(tmp_path / "absent.json") is None
 
 
+def test_load_brand_vocab_corrupt_json_returns_none_and_logs(tmp_path: Path, caplog) -> None:
+    """Битый JSON деградирует до ``None`` (без брендовых правил), но с ERROR-логом."""
+    import logging
+
+    path = tmp_path / "vocab.json"
+    path.write_text("{не json", encoding="utf-8")
+    with caplog.at_level(logging.ERROR, logger="attribute_extractor.references"):
+        assert load_brand_vocab(path) is None
+    assert any(str(path) in record.getMessage() for record in caplog.records)
+
+
+def test_load_brand_vocab_invalid_schema_returns_none_and_logs(tmp_path: Path, caplog) -> None:
+    """Валидный JSON, не проходящий схему BrandVocab, — та же деградация с логом."""
+    import json as json_module
+    import logging
+
+    path = tmp_path / "vocab.json"
+    path.write_text(json_module.dumps({"names": "не список"}), encoding="utf-8")
+    with caplog.at_level(logging.ERROR, logger="attribute_extractor.references"):
+        assert load_brand_vocab(path) is None
+    assert any(str(path) in record.getMessage() for record in caplog.records)
+
+
+def test_build_default_registry_survives_corrupt_brand_vocab(tmp_path: Path, monkeypatch) -> None:
+    """Порча ассета не роняет сборку реестра (и старт сервиса) — деградация."""
+    from attribute_extractor import extractors
+
+    path = tmp_path / "vocab.json"
+    path.write_text("{не json", encoding="utf-8")
+    monkeypatch.setattr(extractors, "DEFAULT_BRAND_VOCAB_PATH", str(path))
+
+    registry = extractors.build_default_registry()
+    extractor = registry.get("rule")
+    assert isinstance(extractor, RuleExtractor)
+    # Без словаря брендовые правила молчат: Apple из заголовка не извлекается.
+    candidates = [
+        c
+        for c in extractor.extract(_card("Смартфон Apple iPhone 13 Pro"), generic_schema())
+        if c.attribute_code == "brand"
+    ]
+    assert candidates == []
+
+
 def test_build_default_registry_wires_brand_vocab() -> None:
     from attribute_extractor.extractors import build_default_registry
 

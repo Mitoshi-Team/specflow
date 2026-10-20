@@ -3,10 +3,13 @@
 from specflow_contracts.api import (
     BatchExtractRequest,
     BatchExtractResponse,
+    BatchListResponse,
+    BatchSummary,
     ErrorDetail,
     ErrorResponse,
     HealthResponse,
     ProductCardRequest,
+    StoredBatchResponse,
 )
 from specflow_contracts.domain import (
     Attribute,
@@ -31,6 +34,8 @@ __all__ = [
     "AttributeValueType",
     "BatchExtractRequest",
     "BatchExtractResponse",
+    "BatchListResponse",
+    "BatchSummary",
     "CategorySchema",
     "ErrorDetail",
     "ErrorCode",
@@ -44,4 +49,5 @@ __all__ = [
     "ProductCardRequest",
     "Span",
     "SpanField",
+    "StoredBatchResponse",
 ]

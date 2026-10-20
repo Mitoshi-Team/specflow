@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LAST_BATCH_STORAGE_KEY } from "../constants";
 import type { BatchExtractResponse } from "../schemas/api";
@@ -61,5 +61,26 @@ describe("lastBatch", () => {
 
     expect(readLastBatch()).toBeNull();
     expect(window.localStorage.getItem(LAST_BATCH_STORAGE_KEY)).toBeNull();
+  });
+
+  it("writeLastBatch возвращает true при успешной записи", () => {
+    expect(writeLastBatch({ response: batchResponse() })).toBe(true);
+    expect(readLastBatch()).not.toBeNull();
+  });
+
+  it("writeLastBatch возвращает false при недоступном localStorage", () => {
+    // Имитация исчерпанной квоты/приватного режима: запись невозможна.
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded");
+      });
+
+    try {
+      expect(writeLastBatch({ response: batchResponse() })).toBe(false);
+    } finally {
+      setItem.mockRestore();
+    }
+    expect(readLastBatch()).toBeNull();
   });
 });

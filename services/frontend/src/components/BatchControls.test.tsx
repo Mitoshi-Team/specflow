@@ -52,12 +52,14 @@ function successResponse(errors = 0): BatchExtractResponse {
 }
 
 describe("BatchControls", () => {
-  it("показывает настройки по умолчанию и статус ожидания", () => {
+  it("показывает настройки по умолчанию без статусной строки", () => {
     renderControls();
 
     expect(input("Размер батча").value).toBe("1");
     expect(input("Порог уверенности").value).toBe("0.8");
-    expect(screen.getByRole("status").textContent).toBe("Ожидает запуска");
+    // Текстовый статус со страницы убран: во время обработки состояние
+    // показывает оверлей загрузки на уровне страницы (PageHome).
+    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
@@ -136,7 +138,9 @@ describe("BatchControls", () => {
       progress: { processed: 0, total: 5 },
     });
 
-    expect(screen.getByRole("status").textContent).toBe("Обрабатывается");
+    // Статусная строка убрана — остаётся только прогресс и блокировка
+    // контролов; спиннер во время выполнения показывает оверлей PageHome.
+    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByText("Обработано 0 из 5")).toBeDefined();
     expect(button("Обработать").disabled).toBe(true);
     expect(button("Сброс").disabled).toBe(true);
@@ -154,7 +158,6 @@ describe("BatchControls", () => {
       response: successResponse(),
     });
 
-    expect(screen.getByRole("status").textContent).toBe("Завершён");
     expect(screen.getByText("Обработано 3 из 3")).toBeDefined();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
       "3",
@@ -170,9 +173,6 @@ describe("BatchControls", () => {
       response: successResponse(2),
     });
 
-    expect(screen.getByRole("status").textContent).toBe(
-      "Завершён с ошибками",
-    );
     expect(screen.getByText("Ошибок обработки: 2")).toBeDefined();
   });
 
@@ -192,7 +192,6 @@ describe("BatchControls", () => {
     expect(alert.textContent).toContain("HTTP 422");
     expect(alert.textContent).toContain("Некорректный запрос");
     expect(alert.textContent).toContain("body.items: too many");
-    expect(screen.getByRole("status").textContent).toBe("Ошибка");
     expect(screen.getByText("Обработано 0 из 3")).toBeDefined();
   });
 

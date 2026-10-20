@@ -1,13 +1,18 @@
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 
 from specflow_contracts.api import (
     BatchExtractRequest,
     BatchExtractResponse,
+    BatchListResponse,
+    BatchSummary,
     ErrorDetail,
     ErrorResponse,
     HealthResponse,
     ProductCardRequest,
+    StoredBatchResponse,
 )
 from specflow_contracts.constants import MAX_BATCH_SIZE, MAX_TEXT_LENGTH
 from specflow_contracts.domain import AttributeCandidate, ExtractionResult
@@ -142,6 +147,69 @@ def test_batch_extract_response_round_trip() -> None:
     payload = response.model_dump()
     assert payload["batch_id"] == "batch-1"
     assert payload["results"][0]["attributes"][0]["attribute_code"] == "brand"
+
+
+def test_batch_extract_response_persisted_defaults_to_true() -> None:
+    """persisted по умолчанию True: поле выставляет сервер (api_contract.md, 3.5)."""
+    response = BatchExtractResponse(total=0, ok=0, low_confidence=0, errors=0)
+
+    assert response.persisted is True
+
+    response.persisted = False
+    assert response.model_dump()["persisted"] is False
+
+
+def test_batch_summary_round_trip() -> None:
+    """Сводка истории несёт id, время и счётчики; threshold опционален."""
+    summary = BatchSummary(
+        batch_id="b-1",
+        created_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
+        total=2,
+        ok=1,
+        low_confidence=1,
+        errors=0,
+    )
+
+    payload = summary.model_dump()
+    assert payload["batch_id"] == "b-1"
+    assert payload["created_at"].tzinfo is not None
+    assert payload["total"] == 2
+    assert summary.threshold is None
+
+
+def test_batch_summary_requires_created_at() -> None:
+    """Время создания обязательно: сервер всегда назначает его при записи."""
+    with pytest.raises(ValidationError):
+        BatchSummary(batch_id="b-1", total=1, ok=1, low_confidence=0, errors=0)
+
+
+def test_batch_list_response_defaults() -> None:
+    listing = BatchListResponse(items=[], total=0)
+
+    assert listing.items == []
+    assert listing.total == 0
+
+
+def test_stored_batch_response_keeps_cards_and_response() -> None:
+    """Сохранённый батч несёт исходные карточки и полный ответ; cards опц."""
+    stored = StoredBatchResponse(
+        batch_id="b-1",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        threshold=0.8,
+        cards=[ProductCardRequest(title="Кофемолка")],
+        response=BatchExtractResponse(total=1, ok=1, low_confidence=0, errors=0),
+    )
+
+    assert stored.cards[0].title == "Кофемолка"
+    assert stored.response.persisted is True
+
+    without_cards = StoredBatchResponse(
+        batch_id="b-2",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        response=BatchExtractResponse(total=1, ok=1, low_confidence=0, errors=0),
+    )
+    assert without_cards.cards == []
+    assert without_cards.threshold is None
 
 
 def test_health_response_status_is_enum() -> None:

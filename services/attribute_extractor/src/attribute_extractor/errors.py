@@ -7,12 +7,15 @@ try/except в эндпоинтах.
 """
 
 from attribute_extractor.constants import (
+    BATCH_HISTORY_UNAVAILABLE_DETAIL,
+    BATCH_NOT_FOUND_DETAIL,
     BATCH_SIZE_MISMATCH_DETAIL,
     CATEGORY_NOT_FOUND_DETAIL,
     HTTP_400_BAD_REQUEST,
     HTTP_404_NOT_FOUND,
     HTTP_429_TOO_MANY_REQUESTS,
     HTTP_500_INTERNAL_SERVER_ERROR,
+    HTTP_503_SERVICE_UNAVAILABLE,
     RATE_LIMITED_DETAIL,
 )
 from specflow_contracts import ErrorCode
@@ -47,6 +50,30 @@ class BatchSizeMismatchError(ApiError):
 
     def __init__(self, declared: int, actual: int) -> None:
         super().__init__(f"{BATCH_SIZE_MISMATCH_DETAIL}: {declared} != {actual}")
+
+
+class BatchNotFoundError(ApiError):
+    """Запрошенный ``batch_id`` не найден в истории батчей (404)."""
+
+    status_code = HTTP_404_NOT_FOUND
+    code = ErrorCode.NOT_FOUND
+
+    def __init__(self, batch_id: str) -> None:
+        super().__init__(f"{BATCH_NOT_FOUND_DETAIL}: {batch_id}")
+
+
+class BatchHistoryUnavailableError(ApiError):
+    """Хранилище истории батчей недоступно (503).
+
+    Сбой внешней зависимости виден клиенту явно, а не маскируется пустым
+    списком: причина (traceback) фиксируется в логе при выбросе.
+    """
+
+    status_code = HTTP_503_SERVICE_UNAVAILABLE
+    code = ErrorCode.HTTP_ERROR
+
+    def __init__(self) -> None:
+        super().__init__(BATCH_HISTORY_UNAVAILABLE_DETAIL)
 
 
 class TextCleanupInvariantError(ApiError):

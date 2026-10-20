@@ -5,6 +5,8 @@
 ``ExtractionResult``, ``Span``).
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 from specflow_contracts.constants import (
@@ -64,6 +66,39 @@ class BatchExtractResponse(BaseModel):
     results: list[ExtractionResult] = Field(default_factory=list)
     batch_id: str | None = None
     processing_time_ms_total: int | None = None
+    # Сервер выставляет признак явно: False — запись в историю не удалась
+    # (причина в логе сервиса), клиенту показывается предупреждение о риске
+    # потери результатов (api_contract.md, 3.5/4.2).
+    persisted: bool = True
+
+
+class BatchSummary(BaseModel):
+    """Краткая сводка сохранённого батча (``GET /api/v1/batches``)."""
+
+    batch_id: str
+    created_at: datetime
+    total: int
+    ok: int
+    low_confidence: int
+    errors: int
+    threshold: float | None = None
+
+
+class BatchListResponse(BaseModel):
+    """История батчей, новые первыми (``GET /api/v1/batches``)."""
+
+    items: list[BatchSummary]
+    total: int
+
+
+class StoredBatchResponse(BaseModel):
+    """Полностью сохранённый батч (``GET /api/v1/batches/{batch_id}``)."""
+
+    batch_id: str
+    created_at: datetime
+    threshold: float | None = None
+    cards: list[ProductCardRequest] = Field(default_factory=list)
+    response: BatchExtractResponse
 
 
 class HealthResponse(BaseModel):

@@ -2,13 +2,26 @@
 
 import logging
 import time
-from typing import Any
+import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from attribute_extractor.batch_store import (
+    BatchStore,
+    BatchStoreError,
+    InMemoryBatchStore,
+    PostgresBatchStore,
+)
 from attribute_extractor.config import Settings
 from attribute_extractor.constants import (
+    BATCH_LIST_DEFAULT_LIMIT,
+    BATCH_LIST_MAX_LIMIT,
+    BATCHES_ENDPOINT,
     CATEGORIES_ENDPOINT,
     CATEGORY_LIST_DEFAULT_LIMIT,
     CATEGORY_LIST_MAX_LIMIT,
@@ -21,12 +34,18 @@ from attribute_extractor.constants import (
     HTTP_404_NOT_FOUND,
     HTTP_422_UNPROCESSABLE_ENTITY,
     HTTP_500_INTERNAL_SERVER_ERROR,
+    HTTP_503_SERVICE_UNAVAILABLE,
     INFO_ENDPOINT,
     NER_EXTRACTOR_NAME,
     RULE_EXTRACTOR_NAME,
 )
 from attribute_extractor.error_handlers import register_error_handlers
-from attribute_extractor.errors import BatchSizeMismatchError, CategoryNotFoundError
+from attribute_extractor.errors import (
+    BatchHistoryUnavailableError,
+    BatchNotFoundError,
+    BatchSizeMismatchError,
+    CategoryNotFoundError,
+)
 from attribute_extractor.extractors import build_default_registry
 from attribute_extractor.extractors.registry import ExtractorRegistry
 from attribute_extractor.pipeline import ExtractPipeline
@@ -35,12 +54,14 @@ from attribute_extractor.rate_limit import RateLimitMiddleware
 from specflow_contracts import (
     BatchExtractRequest,
     BatchExtractResponse,
+    BatchListResponse,
     CategorySchema,
     ErrorResponse,
     ExtractionResult,
     ExtractionStatus,
     HealthResponse,
     ProductCardRequest,
+    StoredBatchResponse,
 )
 from specflow_contracts.enums import HealthStatus
 
@@ -59,6 +80,40 @@ _BATCH_RESPONSES: dict[int | str, dict[str, Any]] = {
 _CATEGORY_RESPONSES: dict[int | str, dict[str, Any]] = {
     HTTP_404_NOT_FOUND: {"model": ErrorResponse},
 }
+_BATCH_LIST_RESPONSES: dict[int | str, dict[str, Any]] = {
+    HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+}
+_BATCH_DETAIL_RESPONSES: dict[int | str, dict[str, Any]] = {
+    HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    HTTP_503_SERVICE_UNAVAILABLE: {"model": ErrorResponse},
+}
+
+
+def _persist_batch(
+    store: BatchStore,
+    request: BatchExtractRequest,
+    batch_id: str,
+    response: BatchExtractResponse,
+) -> bool:
+    """Сохраняет батч в серверную историю; ``False`` — запись не удалась (см. лог).
+
+    Сбой хранилища не прерывает запрос: извлечение уже выполнено, клиенту уходит
+    признак ``persisted=false``, а traceback причины остаётся в логе сервиса
+    (замечание ревью: ошибки записи не должны подавляться молча).
+    """
+    stored = StoredBatchResponse(
+        batch_id=batch_id,
+        created_at=datetime.now(UTC),
+        threshold=request.threshold_override,
+        cards=request.items,
+        response=response,
+    )
+    try:
+        store.save(stored)
+    except BatchStoreError:
+        logger.exception("Не удалось сохранить батч %s в серверной истории", batch_id)
+        return False
+    return True
 
 
 def create_app() -> FastAPI:
@@ -73,7 +128,42 @@ def create_app() -> FastAPI:
     pipeline = ExtractPipeline(settings=app_settings, registry=registry)
     started_at = time.monotonic()
 
-    app = FastAPI(title=app_settings.app_name, docs_url="/docs", redoc_url="/redoc")
+    # Серверная история батчей (api_contract.md, 4.8/4.9): PostgreSQL при
+    # заданном EXTRACTOR_DATABASE_URL, иначе память процесса (dev без БД).
+    batch_store: BatchStore
+    if app_settings.database_url:
+        batch_store = PostgresBatchStore(app_settings.database_url)
+    else:
+        batch_store = InMemoryBatchStore()
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        """Логирует режим истории батчей и заранее готовит схему PostgreSQL."""
+        if isinstance(batch_store, PostgresBatchStore):
+            logger.info("История батчей: PostgreSQL (EXTRACTOR_DATABASE_URL задан)")
+            try:
+                batch_store.ensure_schema()
+            except BatchStoreError:
+                # Сервис не роняем: хранилище повторит подготовку схемы при
+                # первом обращении, причина зафиксирована здесь с traceback.
+                logger.exception("Схема истории батчей не создана при старте сервиса")
+        else:
+            logger.info(
+                "История батчей: память процесса (EXTRACTOR_DATABASE_URL не задан) "
+                "— данные не переживают перезапуск"
+            )
+        yield
+
+    app = FastAPI(
+        title=app_settings.app_name, docs_url="/docs", redoc_url="/redoc", lifespan=lifespan
+    )
+    # Хранилище доступно через state: тесты подменяют его на заглушки.
+    app.state.batch_store = batch_store
+
+    def _current_store() -> BatchStore:
+        """Актуальное хранилище истории батчей (чтение на момент запроса)."""
+        return cast(BatchStore, app.state.batch_store)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.cors_origins or ["*"],
@@ -148,8 +238,12 @@ def create_app() -> FastAPI:
                         processing_time_ms=0,
                     )
                 )
-        return BatchExtractResponse(
-            batch_id=request.batch_id,
+        batch_id = request.batch_id or str(uuid.uuid4())
+        # Батч считается сохранённым: при неудаче записи ниже признак
+        # инвертируется, а копия в истории (если запись прошла) остаётся
+        # с persisted=true — клиент видит честное состояние.
+        response = BatchExtractResponse(
+            batch_id=batch_id,
             total=len(results),
             ok=sum(result.status == ExtractionStatus.OK for result in results),
             low_confidence=sum(
@@ -158,7 +252,53 @@ def create_app() -> FastAPI:
             errors=sum(result.status == ExtractionStatus.ERROR for result in results),
             results=results,
             processing_time_ms_total=int((time.monotonic() - started) * 1000),
+            persisted=True,
         )
+        if not _persist_batch(_current_store(), request, batch_id, response):
+            response.persisted = False
+        return response
+
+    @app.get(
+        f"{app_settings.api_prefix}{BATCHES_ENDPOINT}",
+        response_model=BatchListResponse,
+        responses=_BATCH_LIST_RESPONSES,
+        tags=["batches"],
+    )
+    async def batches(
+        limit: int = Query(BATCH_LIST_DEFAULT_LIMIT, ge=1, le=BATCH_LIST_MAX_LIMIT),
+        offset: int = Query(0, ge=0),
+    ) -> BatchListResponse:
+        """История сохранённых батчей, новые первыми (api_contract.md, 4.8).
+
+        Хранилище недоступно → 503 ErrorResponse; извлечение при этом
+        продолжает работать (замечание ревью: сбои внешних зависимостей
+        должны быть видны, а не подавлены).
+        """
+        try:
+            items, total = _current_store().list_batches(limit=limit, offset=offset)
+        except BatchStoreError as exc:
+            logger.exception(
+                "Не удалось получить список батчей (limit=%d, offset=%d)", limit, offset
+            )
+            raise BatchHistoryUnavailableError from exc
+        return BatchListResponse(items=items, total=total)
+
+    @app.get(
+        f"{app_settings.api_prefix}{BATCHES_ENDPOINT}/{{batch_id}}",
+        response_model=StoredBatchResponse,
+        responses=_BATCH_DETAIL_RESPONSES,
+        tags=["batches"],
+    )
+    async def batch_detail(batch_id: str) -> StoredBatchResponse:
+        """Сохранённый батч: 404 — не найден, 503 — хранилище недоступно (4.9)."""
+        try:
+            stored = _current_store().get_batch(batch_id)
+        except BatchStoreError as exc:
+            logger.exception("Не удалось прочитать батч %s из истории", batch_id)
+            raise BatchHistoryUnavailableError from exc
+        if stored is None:
+            raise BatchNotFoundError(batch_id)
+        return stored
 
     @app.get(f"{app_settings.api_prefix}{CATEGORIES_ENDPOINT}", tags=["categories"])
     async def categories(

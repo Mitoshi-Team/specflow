@@ -70,6 +70,29 @@ services:
         max-file: "3"
     restart: unless-stopped
 
+  postgres:
+    # Серверная история выполненных батчей (api_contract.md, 4.8/4.9).
+    # Порт наружу не публикуется: доступ только внутри docker-сети.
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-specflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-specflow}
+      POSTGRES_DB: ${POSTGRES_DB:-specflow}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-specflow} -d ${POSTGRES_DB:-specflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
   attribute_extractor:
     build:
       context: .
@@ -77,6 +100,13 @@ services:
     env_file:
       - path: .env
         required: false
+    environment:
+      # Серверная история батчей (api_contract.md, 4.8/4.9). Пароль — только
+      # для локальной разработки, в проде задаётся через .env (см. .env.example).
+      EXTRACTOR_DATABASE_URL: postgresql://${POSTGRES_USER:-specflow}:${POSTGRES_PASSWORD:-specflow}@postgres:5432/${POSTGRES_DB:-specflow}
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import sys, urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health', timeout=2); sys.exit(0)\" || exit 1"]
       interval: 10s
@@ -89,3 +119,6 @@ services:
         max-size: "10m"
         max-file: "3"
     restart: unless-stopped
+
+volumes:
+  postgres-data:

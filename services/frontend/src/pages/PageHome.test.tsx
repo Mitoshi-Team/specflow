@@ -6,7 +6,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "../i18n";
@@ -60,6 +60,17 @@ const IDLE_BATCH: UseBatchExtractResult = {
 
 function fakeFile(name = "cards.csv"): File {
   return { name, size: 1024 } as unknown as File;
+}
+
+/** Показывает query текущего маршрута — фиксирует параметры перехода. */
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <div>
+      <span>Страница результатов</span>
+      <span>search:{location.search}</span>
+    </div>
+  );
 }
 
 function renderHome() {
@@ -177,9 +188,11 @@ describe("PageHome", () => {
   });
 
   it("не показывает кнопку «Новый батч», когда нечего сбрасывать", () => {
-    renderHome();
+    const { container } = renderHome();
 
     expect(screen.queryByRole("button", { name: "Новый батч" })).toBeNull();
+    // Без активной обработки оверлей загрузки не показывается.
+    expect(container.querySelector(".loading-overlay")).toBeNull();
   });
 
   it("сбрасывает данные по кнопке «Новый батч» и возвращает экран загрузки", () => {
@@ -205,6 +218,28 @@ describe("PageHome", () => {
 
     expect(screen.queryByText("Предпросмотр данных")).toBeNull();
     expect(screen.getByLabelText("Выбор файла карточек")).toBeDefined();
+  });
+
+  it("показывает оверлей загрузки поверх страницы во время батча", () => {
+    useBatchExtractMock.mockReturnValue({
+      ...IDLE_BATCH,
+      status: "running",
+      progress: { processed: 0, total: 5 },
+    });
+    const { container } = renderHome();
+
+    // Во время обработки поверх всего — крупный акцентный спиннер строго
+    // по центру, без видимой подписи, вместо статусной строки в панели батча.
+    const overlay = container.querySelector(".loading-overlay");
+    expect(overlay).not.toBeNull();
+    expect(
+      within(overlay as HTMLElement).getByRole("status", {
+        name: "Загрузка…",
+      }),
+    ).toBeDefined();
+    expect(screen.queryByText("Загрузка…")).toBeNull();
+    expect(screen.queryByText("Обрабатывается")).toBeNull();
+    expect(screen.getByText("Обработано 0 из 5")).toBeDefined();
   });
 
   it("переходит на страницу результатов после успешного батча", async () => {
@@ -243,6 +278,78 @@ describe("PageHome", () => {
     const stored = readLastBatch();
     expect(stored?.response).toEqual(response);
     expect(stored?.cards).toEqual([{ description: "Ручная кофемолка" }]);
+  });
+
+  it("переходит по batch_id, когда сервер сохранил батч", async () => {
+    useBatchExtractMock.mockReturnValue({
+      ...IDLE_BATCH,
+      status: "success",
+      progress: { processed: 1, total: 1 },
+      response: {
+        total: 1,
+        ok: 1,
+        low_confidence: 0,
+        errors: 0,
+        results: [],
+        batch_id: "b-42",
+        persisted: true,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<PageHome />} />
+          <Route path="/results" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Текст карточки" }));
+    fireEvent.change(screen.getByLabelText("Описание карточки"), {
+      target: { value: "Ручная кофемолка" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Обработать" }));
+
+    // Страница результатов подтянет сохранённый серверный батч из истории.
+    expect(await screen.findByText("search:?batch_id=b-42")).toBeDefined();
+  });
+
+  it("переходит на результаты без batch_id, если батч не сохранён", async () => {
+    useBatchExtractMock.mockReturnValue({
+      ...IDLE_BATCH,
+      status: "success",
+      progress: { processed: 1, total: 1 },
+      response: {
+        total: 1,
+        ok: 1,
+        low_confidence: 0,
+        errors: 0,
+        results: [],
+        batch_id: "b-42",
+        persisted: false,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<PageHome />} />
+          <Route path="/results" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Текст карточки" }));
+    fireEvent.change(screen.getByLabelText("Описание карточки"), {
+      target: { value: "Ручная кофемолка" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Обработать" }));
+
+    // persisted=false → без ссылки на серверную историю; локальная копия
+    // остаётся фолбэком, страница результатов покажет предупреждение.
+    expect(await screen.findByText("search:")).toBeDefined();
+    expect(readLastBatch()?.response.persisted).toBe(false);
   });
 
   it("очищает сохранённый батч по кнопке «Новый батч»", () => {

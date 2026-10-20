@@ -17,6 +17,7 @@ HEALTH_ENDPOINT = "/health"
 
 EXTRACT_ENDPOINT = "/extract"
 EXTRACT_BATCH_ENDPOINT = "/extract/batch"
+BATCHES_ENDPOINT = "/batches"
 CATEGORIES_ENDPOINT = "/categories"
 INFO_ENDPOINT = "/info"
 CONFIG_ENDPOINT = "/config"
@@ -30,6 +31,7 @@ HTTP_405_METHOD_NOT_ALLOWED = 405
 HTTP_422_UNPROCESSABLE_ENTITY = 422
 HTTP_429_TOO_MANY_REQUESTS = 429
 HTTP_500_INTERNAL_SERVER_ERROR = 500
+HTTP_503_SERVICE_UNAVAILABLE = 503
 
 # --- Обработка ошибок API (ErrorResponse, api_contract.md, 3.8) ---------------
 
@@ -47,6 +49,12 @@ BATCH_SIZE_MISMATCH_DETAIL = "batch_size does not match the number of items"
 
 CATEGORY_NOT_FOUND_DETAIL = "category not found"
 """Основа детали ответа 404 для неизвестной категории (имя — в хвосте сообщения)."""
+
+BATCH_NOT_FOUND_DETAIL = "batch not found"
+"""Основа детали ответа 404 для неизвестного ``batch_id`` истории (имя — в хвосте)."""
+
+BATCH_HISTORY_UNAVAILABLE_DETAIL = "batch history unavailable"
+"""Деталь ответа 503: хранилище истории батчей недоступно (извлечение продолжает работать)."""
 
 HTTP_STATUS_ERROR_CODES = {
     HTTP_400_BAD_REQUEST: ErrorCode.BAD_REQUEST,
@@ -108,6 +116,26 @@ MIN_BATCH_SIZE = 1
 
 DEFAULT_MAX_BATCH_SIZE = 50
 """Максимальное число карточек в одном пакетном запросе."""
+
+# --- Серверная история батчей (batch_store) -----------------------------------
+
+BATCH_LIST_DEFAULT_LIMIT = 20
+"""Значение ``limit`` по умолчанию для списка истории батчей (GET /batches)."""
+
+BATCH_LIST_MAX_LIMIT = 100
+"""Максимальный ``limit`` списка истории батчей."""
+
+IN_MEMORY_BATCH_LIMIT = 100
+"""Сколько батчей держит хранилище в памяти (запасной режим без PostgreSQL).
+
+Защита от неограниченного роста памяти процесса: при переполнении вытесняется
+самый старый батч."""
+
+BATCH_STORE_CONNECT_TIMEOUT_SECONDS = 3
+"""Таймаут подключения psycopg к PostgreSQL, в секундах.
+
+Ограничивает задержку ответа, если БД недоступна: запрос извлечения при этом
+не прерывается (см. ``batch_store``/``main``)."""
 
 # --- Обязательные проверки и нормализация -----------------------------------
 

@@ -13,6 +13,7 @@ import type { BatchSettings } from "../hooks/useBatchExtract";
 import { useFileParser } from "../hooks/useFileParser";
 import { formatFileSize } from "../lib/format";
 import { clearLastBatch, writeLastBatch } from "../lib/lastBatch";
+import type { StoredBatch } from "../lib/lastBatch";
 import type { ProductCardRequest } from "../schemas/api";
 
 /** Параметры последнего запущенного батча: нужны, чтобы передать на страницу результатов. */
@@ -93,9 +94,12 @@ export default function PageHome() {
   );
 
   // Переход к результатам при успехе (frontend.md, сценарий 2, шаг 4).
-  // Ответ сохраняем в localStorage, а не передаём через `location.state`:
-  // состояние маршрута теряется при повторном переходе на «Результаты» из
-  // навигации и при перезагрузке страницы.
+  // Батч сохранён сервером (api_contract.md, 4.8/4.9) — переходим по
+  // `?batch_id=`, откуда страница результатов подгружает его из истории.
+  // Локальная копия остаётся фолбэком (dev-режим без БД, persisted=false).
+  // Если localStorage недоступен И сервер не сохранил батч, передаём его
+  // через state как последний шанс показать результаты этой сессии — ошибка
+  // записи не подавляется молча, а ведёт к последствию (замечание ревью).
   useEffect(() => {
     if (
       batch.status !== "success" ||
@@ -104,12 +108,21 @@ export default function PageHome() {
     ) {
       return;
     }
-    writeLastBatch({
+    const storedBatch: StoredBatch = {
       response: batch.response,
       threshold: submitted.settings.thresholdOverride,
       cards: submitted.cards,
-    });
-    navigate("/results");
+    };
+    const storedLocally = writeLastBatch(storedBatch);
+    const batchId = batch.response.batch_id;
+    const serverSaved = batch.response.persisted !== false && batchId != null;
+    if (serverSaved && batchId != null) {
+      navigate(`/results?batch_id=${encodeURIComponent(batchId)}`);
+    } else if (storedLocally) {
+      navigate("/results");
+    } else {
+      navigate("/results", { state: { batch: storedBatch } });
+    }
   }, [batch.status, batch.response, submitted, navigate]);
 
   return (
@@ -204,6 +217,21 @@ export default function PageHome() {
           onReset={batch.reset}
         />
       </section>
+
+      {/* Пока батч обрабатывается — оверлей поверх всей страницы: крупный
+          спиннер строго по центру (без видимой подписи; состояние для
+          скринридера объявляет role="status" + aria-label) и замыливание
+          фона. Оверлей перехватывает клики, поэтому ввод на время
+          обработки заблокирован (design.md, «Прогресс и состояние батча»). */}
+      {batch.status === "running" ? (
+        <div className="loading-overlay">
+          <div
+            className="loading-overlay__spinner"
+            role="status"
+            aria-label={t("loader.label")}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }

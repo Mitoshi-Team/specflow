@@ -6,6 +6,11 @@
 ``CHARACTERISTIC`` (имя параметра) и ``PROPERTY`` (значение) с кодом поля —
 обучающая выборка для token-classification без ручной разметки.
 
+Помимо канонических полей размечаются и неканонические параметры
+(``include_uncoded``): их спаны несут ``attribute_code=None`` — метки NER от
+кода не зависят, а код назначается полю только после ручного аудита
+(авто-новые поля резолвера кода в слабой разметке не получают).
+
 Формат записи: ``{"text", "spans": [{"start", "end", "label",
 "attribute_code"}], "sku_id", "category_name"}``; текст — тот же вид, что
 увидит NER в пайплайне (``normalize_text`` контрактного ``raw_text``).
@@ -33,17 +38,25 @@ from specflow_contracts.constants import RAW_DESCRIPTION_LABEL, RAW_TITLE_LABEL
 _TRIVIAL_VALUES = frozenset({"да", "нет", "есть", "true", "false", "-", "—"})
 _MIN_VALUE_LENGTH = 2
 _MAX_TEXT_LENGTH = 4000
+# Технические дубли имён параметров организаторов («Диагональ_search» и т.п.).
+_TECHNICAL_NAME_SUFFIX = "_search"
 
 
 @dataclass
 class WeakSpan:
-    """Спан слабой разметки в нормализованном тексте карточки."""
+    """Спан слабой разметки в нормализованном тексте карточки.
+
+    ``attribute_code`` — код канонического поля либо ``None`` для
+    неканонического параметра; ``parameter_name`` — служебный контекст для
+    статистики генератора, в JSONL не сериализуется.
+    """
 
     label: str
-    attribute_code: str
+    attribute_code: str | None
     start: int
     end: int
     text: str
+    parameter_name: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -125,16 +138,40 @@ def find_value_span(
     return None
 
 
-def resolve_attribute_code(parameter_name: str, resolver: FieldResolver) -> str | None:
-    """Код канонического поля для имени параметра (без авто-добавления новых).
+@dataclass(frozen=True)
+class ParamResolution:
+    """Резолв имени параметра для слабой разметки.
 
-    Новые поля (вне каталога) и заблокированные имена для weak-разметки
-    бесполезны: обучаем только 9 каноническим полям.
+    ``code`` — код канонического поля либо ``None`` (неканонический параметр:
+    имя вне каталога, в том числе авто-новое поле резолвера). ``skip`` —
+    параметр отбрасывается целиком: блоклист либо техническое имя ``_search``.
     """
+
+    code: str | None
+    skip: bool
+
+
+def is_noise_parameter(parameter_name: str) -> bool:
+    """Служебное имя параметра, не являющееся характеристикой товара."""
+    return parameter_name.strip().casefold().endswith(_TECHNICAL_NAME_SUFFIX)
+
+
+def resolve_parameter(parameter_name: str, resolver: FieldResolver) -> ParamResolution:
+    """Резолв имени параметра в код поля для слабой разметки.
+
+    Канонический матч даёт код поля; имя вне каталога (резолвер при этом
+    авто-добавляет новое поле в память) даёт ``code=None`` — канон назначает
+    полю только ручной аудит; заблокированные и технические имена дают
+    ``skip=True``.
+    """
+    if is_noise_parameter(parameter_name):
+        return ParamResolution(code=None, skip=True)
     match = resolver.resolve(parameter_name)
-    if match.blocked or match.is_new_field or match.matched_code is None:
-        return None
-    return match.matched_code
+    if match.blocked:
+        return ParamResolution(code=None, skip=True)
+    if match.matched_code is not None and not match.is_new_field:
+        return ParamResolution(code=match.matched_code, skip=False)
+    return ParamResolution(code=None, skip=False)
 
 
 def build_record(
@@ -145,7 +182,8 @@ def build_record(
     *,
     sku_id: str | None = None,
     category_name: str | None = None,
-    resolve_cache: MutableMapping[str, str | None] | None = None,
+    resolve_cache: MutableMapping[str, ParamResolution] | None = None,
+    include_uncoded: bool = False,
 ) -> WeakRecord | None:
     """Запись weak-датасета из текста карточки и seller-параметров.
 
@@ -154,8 +192,14 @@ def build_record(
     резолвится в каноническое поле, в тексте ищутся спаны значения
     (``PROPERTY``) и имени (``CHARACTERISTIC``); параметры без вхождения
     значения в текст пропускаются — «истина только в П» не размечается.
-    ``resolve_cache`` — опциональный memo имён параметров: имена повторяются
-    от карточки к карточке, векторный резолв каждого заново избыточен.
+
+    ``include_uncoded=True`` добавляет спаны и для неканонических параметров
+    (``attribute_code=None``): метки CHARACTERISTIC/PROPERTY от кода не
+    зависят. ``resolve_cache`` — опциональный memo имён параметров: имена
+    повторяются от карточки к карточке, векторный резолв каждого заново
+    избыточен. Одинаковые спаны дедуплицируются (разные имена одного поля
+    часто указывают на одно значение); при совпадении приоритет у спана
+    с каноническим кодом.
     """
     text = normalize_text(
         f"{RAW_TITLE_LABEL} {title or ''}\n{RAW_DESCRIPTION_LABEL} {description or ''}"
@@ -163,7 +207,7 @@ def build_record(
     if not text or len(text) > _MAX_TEXT_LENGTH:
         return None
     record = WeakRecord(text=text, sku_id=sku_id, category_name=category_name)
-    resolved: list[tuple[str, str, str]] = []
+    resolved: list[tuple[str, str, str | None]] = []
     for parameter in seller_params:
         name = str(parameter.get("name", "")).strip()
         value = str(parameter.get("value", "")).strip()
@@ -172,41 +216,51 @@ def build_record(
         if len(value) < _MIN_VALUE_LENGTH:
             continue
         if resolve_cache is None or name not in resolve_cache:
-            code = resolve_attribute_code(name, resolver)
+            resolution = resolve_parameter(name, resolver)
             if resolve_cache is not None:
-                resolve_cache[name] = code
+                resolve_cache[name] = resolution
         else:
-            code = resolve_cache[name]
-        if code is None:
+            resolution = resolve_cache[name]
+        if resolution.skip or (resolution.code is None and not include_uncoded):
             continue
-        resolved.append((name, value, code))
+        resolved.append((name, value, resolution.code))
     if not resolved:
         return None
     fragments = _canon_fragments(text)
+    spans: dict[tuple[str, int, int], WeakSpan] = {}
     for name, value, code in resolved:
         value_span = find_value_span(text, value, fragments)
         if value_span is None:
             continue
-        record.spans.append(
+        candidates = [
             WeakSpan(
                 label=NER_LABEL_PROPERTY,
                 attribute_code=code,
                 start=value_span[0],
                 end=value_span[1],
                 text=text[value_span[0] : value_span[1]],
+                parameter_name=name,
             )
-        )
+        ]
         name_span = find_value_span(text, name, fragments)
         if name_span is not None:
-            record.spans.append(
+            candidates.append(
                 WeakSpan(
                     label=NER_LABEL_CHARACTERISTIC,
                     attribute_code=code,
                     start=name_span[0],
                     end=name_span[1],
                     text=text[name_span[0] : name_span[1]],
+                    parameter_name=name,
                 )
             )
+        for span in candidates:
+            key = (span.label, span.start, span.end)
+            existing = spans.get(key)
+            # Канонический код важнее некодированного дубля того же спана.
+            if existing is None or (existing.attribute_code is None and code is not None):
+                spans[key] = span
+    record.spans = list(spans.values())
     if not record.spans:
         return None
     return record

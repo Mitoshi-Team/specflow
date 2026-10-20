@@ -36,6 +36,6 @@
 
 - [x] 5.1 Обновить `test_attribute_extractor_extractors.py`, `test_attribute_extractor_merging.py`
 - [x] 5.2 Добавить тесты на чистку текста, field resolution, блоклист, авто-добавление, rules-fallback
-- [ ] 5.3 Проверить grounding-фильтр и пороги на gold-наборе
+- [x] 5.3 Проверить grounding-фильтр и пороги на gold-наборе
 - [x] 5.4 Синхронизировать `README.md` с новой архитектурой
 - [x] 5.5 Прогнать `uv run pytest` и `uv run ruff check`

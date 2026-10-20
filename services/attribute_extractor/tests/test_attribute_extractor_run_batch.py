@@ -101,7 +101,7 @@ def test_run_batch_writes_only_to_output_dir(tmp_path: Path) -> None:
     run_batch.run_offline(source, tmp_path, write_csv=True)
 
     written = {path.name for path in tmp_path.iterdir() if path.is_file() and path != source}
-    assert written == {"predictions.jsonl", "predictions.csv"}
+    assert written == {"predictions.jsonl", "predictions.csv", "needs_review.csv"}
 
 
 def test_run_batch_limits_input_and_batches(tmp_path: Path) -> None:
@@ -168,3 +168,144 @@ def test_run_batch_rejects_invalid_batch_size(tmp_path: Path) -> None:
 
     with pytest.raises(SystemExit):
         run_batch.main([str(source), "--out", str(tmp_path), "--batch-size", "0"])
+
+
+def _review_result(
+    attributes: list,
+    status,
+    needs_review: bool = True,
+    product_id: str = "p1",
+):
+    return ExtractionResult(
+        attributes=attributes,
+        status=status,
+        needs_review=needs_review,
+        pipeline_version="test",
+        product_id=product_id,
+        category_name="Смартфоны",
+        low_confidence_count=0,
+        processing_time_ms=1,
+    )
+
+
+def _new_field_candidate():
+    from attribute_extractor.constants import NER_CHARACTERISTIC_FEATURE_KEY
+    from specflow_contracts import AttributeCandidate, ExtractionMethod
+
+    return AttributeCandidate(
+        attribute_code="matritsa",
+        raw_value="IPS",
+        normalized_value="IPS",
+        confidence=0.95,
+        extraction_method=ExtractionMethod.NER,
+        is_confirmed_in_text=True,
+        evidence_text="IPS",
+        ner_score=0.95,
+        is_new_field=True,
+        features={NER_CHARACTERISTIC_FEATURE_KEY: "Матрица"},
+    )
+
+
+def _read_review_csv(directory: Path) -> list[dict[str, str]]:
+    with (directory / "needs_review.csv").open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def test_review_csv_candidate_rows_by_reason(tmp_path: Path) -> None:
+    """Кандидат пишется по строке на причину; карточки без ревью не пишутся."""
+    from attribute_extractor.constants import AUTO_THRESHOLD, CONFLICT_FEATURE_KEY
+    from specflow_contracts import AttributeCandidate, ExtractionMethod, ExtractionStatus
+
+    conflict = AttributeCandidate(
+        attribute_code="color",
+        raw_value="черный",
+        normalized_value="черный",
+        confidence=0.95,
+        extraction_method=ExtractionMethod.NER,
+        is_confirmed_in_text=True,
+        features={CONFLICT_FEATURE_KEY: True},
+    )
+    low = AttributeCandidate(
+        attribute_code="brand",
+        raw_value="Acme",
+        normalized_value="Acme",
+        confidence=AUTO_THRESHOLD - 0.1,
+        extraction_method=ExtractionMethod.RULE,
+        is_confirmed_in_text=True,
+    )
+    predictions = [
+        (
+            None,
+            _review_result(
+                [_new_field_candidate(), conflict, low], ExtractionStatus.LOW_CONFIDENCE
+            ),
+        ),
+        (None, _review_result([], ExtractionStatus.SKIPPED, product_id="p2")),
+        (None, _review_result([], ExtractionStatus.OK, needs_review=False, product_id="p3")),
+    ]
+
+    run_batch._write_review_csv(predictions, tmp_path / "needs_review.csv")
+
+    rows = _read_review_csv(tmp_path)
+    by_product_reason = [(row["product_id"], row["reason"]) for row in rows]
+    assert ("p1", "new_field") in by_product_reason
+    assert ("p1", "conflict") in by_product_reason
+    assert ("p1", "low_confidence") in by_product_reason
+    assert ("p2", "skipped") in by_product_reason
+    assert all(row["product_id"] != "p3" for row in rows)
+
+    new_field_row = next(row for row in rows if row["reason"] == "new_field")
+    assert new_field_row["attribute_code"] == "matritsa"
+    assert new_field_row["characteristic"] == "Матрица"
+    assert new_field_row["is_new_field"] == "True"
+    assert new_field_row["extraction_method"] == "ner"
+    assert new_field_row["decision"] == ""
+
+
+def test_review_csv_card_level_reasons(tmp_path: Path) -> None:
+    """partial/error дают карточную строку с пустыми значениями."""
+    from specflow_contracts import ExtractionStatus
+
+    predictions = [
+        (None, _review_result([], ExtractionStatus.PARTIAL, product_id="p4")),
+        (None, _review_result([], ExtractionStatus.ERROR, product_id="p5")),
+    ]
+    run_batch._write_review_csv(predictions, tmp_path / "needs_review.csv")
+
+    rows = _read_review_csv(tmp_path)
+    reasons = {row["product_id"]: row["reason"] for row in rows}
+    assert reasons == {"p4": "required_missing", "p5": "card_error"}
+    assert all(row["attribute_code"] == "" for row in rows)
+
+
+def test_review_csv_sanitizes_formula_cells(tmp_path: Path) -> None:
+    """Значения, начинающиеся с = + - @, получают префикс `'` (CSV-инъекция)."""
+    from specflow_contracts import AttributeCandidate, ExtractionMethod, ExtractionStatus
+
+    candidate = AttributeCandidate(
+        attribute_code="model",
+        raw_value="=1+1",
+        normalized_value="=1+1",
+        confidence=0.5,
+        extraction_method=ExtractionMethod.NER,
+        is_confirmed_in_text=True,
+        ner_score=0.5,
+        is_new_field=True,
+    )
+    run_batch._write_review_csv(
+        [(None, _review_result([candidate], ExtractionStatus.LOW_CONFIDENCE))],
+        tmp_path / "needs_review.csv",
+    )
+
+    rows = _read_review_csv(tmp_path)
+    assert rows[0]["raw_value"] == "'=1+1"
+
+
+def test_run_offline_writes_review_csv_summary(tmp_path: Path) -> None:
+    """Сводка содержит путь needs_review.csv; файл создаётся всегда."""
+    source = _write_csv(tmp_path)
+
+    outcome = run_batch.run_offline(source, tmp_path)
+
+    assert outcome["review_csv"] == tmp_path / "needs_review.csv"
+    assert (tmp_path / "needs_review.csv").exists()

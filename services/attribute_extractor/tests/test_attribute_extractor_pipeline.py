@@ -616,3 +616,53 @@ def test_status_follows_confidence_thresholds(
     else:
         assert result.needs_review is True
         assert result.low_confidence_count == 1
+
+
+class _StubNewFieldNER(BaseExtractor):
+    """FAKE NER: авто-новое поле с высокой модельной оценкой (Этап 5)."""
+
+    name = NER_EXTRACTOR_NAME
+    priority = 10
+
+    def is_available(self) -> bool:
+        return True
+
+    def extract(self, card: ProductCard, schema) -> list[AttributeCandidate]:
+        span = Span(field=SpanField.TITLE, text="IPS", start=14, end=17)
+        return [
+            AttributeCandidate(
+                attribute_code="matritsa",
+                raw_value="IPS",
+                normalized_value="IPS",
+                confidence=0.95,
+                extraction_method=ExtractionMethod.NER,
+                is_confirmed_in_text=True,
+                source_spans=[span],
+                evidence_text="IPS",
+                ner_score=0.95,
+                is_new_field=True,
+            )
+        ]
+
+
+def test_new_field_forces_review_even_with_high_confidence() -> None:
+    """Авто-новое поле всегда требует ручной проверки (Этап 5): карточка
+    получает ``needs_review=true`` и статус ``low_confidence``, хотя
+    уверенность выше AUTO-порога."""
+    from attribute_extractor.extractors import ExtractorRegistry
+
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=ExtractorRegistry([_StubNewFieldNER()]),
+        normalizer=None,
+    )
+    card = ProductCard(
+        product_id="p-new-field", title="Смартфон Acme IPS", category_name="Смартфоны"
+    )
+    result = pipeline.extract(card)
+
+    assert [candidate.attribute_code for candidate in result.attributes] == ["matritsa"]
+    assert result.attributes[0].is_new_field is True
+    assert result.low_confidence_count == 0
+    assert result.needs_review is True
+    assert result.status == ExtractionStatus.LOW_CONFIDENCE

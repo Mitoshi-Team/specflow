@@ -8,8 +8,9 @@
 По умолчанию работает офлайн, без HTTP: карточки из входного файла проходят
 через ``ExtractPipeline`` напрямую. Настройки пайплайна — из переменных
 окружения ``EXTRACTOR_*``. Выход — ``predictions.jsonl`` (сериализованные
-``ExtractionResult`` — вход для scripts/evaluate.py) и опционально CSV в
-формате PredictionRow (``--csv``).
+``ExtractionResult`` — вход для scripts/evaluate.py), очередь ручной проверки
+``needs_review.csv`` (всегда) и опционально CSV в формате PredictionRow
+(``--csv``).
 """
 
 from __future__ import annotations
@@ -29,6 +30,10 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 from attribute_extractor.constants import (  # noqa: E402
+    AUTO_THRESHOLD,
+    CONFLICT_FEATURE_KEY,
+    NER_CHARACTERISTIC_FEATURE_KEY,
+    REVIEW_CSV_COLUMNS,
     RUN_BATCH_CSV_BASE_COLUMNS,
     RUN_BATCH_CSV_NAME,
     RUN_BATCH_DEFAULT_BATCH_SIZE,
@@ -36,6 +41,7 @@ from attribute_extractor.constants import (  # noqa: E402
     RUN_BATCH_JSONL_NAME,
     RUN_BATCH_MAX_BATCH_SIZE,
     RUN_BATCH_MAX_INPUT_SIZE_MB,
+    RUN_BATCH_REVIEW_CSV_NAME,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,6 +154,97 @@ def _write_csv(predictions: list[tuple[Any, Any]], path: Path) -> None:
             writer.writerow(row)
 
 
+def _sanitize_csv_cell(value: Any) -> Any:
+    """Нейтрализовать формулы Excel/Sheets: файл ревью открывают вручную.
+
+    Текстовые ячейки, начинающиеся с ``= + - @`` или табуляции, получают
+    префикс ``'`` — стандартная защита от CSV-инъекций.
+    """
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return f"'{value}"
+    return value
+
+
+def _candidate_reasons(candidate: Any) -> list[str]:
+    """Причины ручной проверки кандидата (одна строка review-CSV на причину)."""
+    reasons: list[str] = []
+    if candidate.is_new_field:
+        reasons.append("new_field")
+    if candidate.confidence < AUTO_THRESHOLD:
+        reasons.append("low_confidence")
+    if candidate.features and CONFLICT_FEATURE_KEY in candidate.features:
+        reasons.append("conflict")
+    return reasons
+
+
+_CARD_REVIEW_REASONS = {
+    "partial": "required_missing",
+    "error": "card_error",
+    "skipped": "skipped",
+}
+
+
+def _write_review_csv(predictions: list[tuple[Any, Any]], path: Path) -> None:
+    """Очередь ручной проверки: все ``needs_review``-карточки прогона.
+
+    Кандидаты пишутся по строке на причину (``new_field``/``low_confidence``/
+    ``conflict``); карточные причины без кандидата (незакрытые обязательные,
+    ошибка разбора, пропуск) — одной строкой с пустыми значениями. Колонка
+    ``decision`` остаётся пустой для ручных отметок при разборе.
+    """
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        columns: list[str] = list(REVIEW_CSV_COLUMNS)
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        for _card, result in predictions:
+            if not result.needs_review:
+                continue
+            base = {
+                "product_id": result.product_id or "",
+                "category_name": result.category_name or "",
+                "status": result.status.value,
+            }
+            emitted = False
+            for candidate in result.attributes:
+                characteristic = ""
+                if candidate.features:
+                    characteristic = str(
+                        candidate.features.get(NER_CHARACTERISTIC_FEATURE_KEY) or ""
+                    )
+                for reason in _candidate_reasons(candidate):
+                    row: dict[str, Any] = {column: "" for column in REVIEW_CSV_COLUMNS}
+                    row.update(base)
+                    row.update(
+                        {
+                            "reason": reason,
+                            "attribute_code": candidate.attribute_code,
+                            "characteristic": characteristic,
+                            "raw_value": candidate.raw_value,
+                            "normalized_value": candidate.normalized_value,
+                            "confidence": candidate.confidence,
+                            "ner_score": candidate.ner_score,
+                            "match_score": candidate.match_score,
+                            "is_new_field": candidate.is_new_field,
+                            "extraction_method": candidate.extraction_method.value,
+                            "evidence_text": candidate.evidence_text or "",
+                            "span_start": (
+                                candidate.source_spans[0].start if candidate.source_spans else None
+                            ),
+                            "span_end": (
+                                candidate.source_spans[0].end if candidate.source_spans else None
+                            ),
+                            "decision": "",
+                        }
+                    )
+                    writer.writerow({key: _sanitize_csv_cell(value) for key, value in row.items()})
+                    emitted = True
+            if not emitted:
+                row = {column: "" for column in REVIEW_CSV_COLUMNS}
+                row.update(base)
+                row["reason"] = _CARD_REVIEW_REASONS.get(result.status.value, result.status.value)
+                writer.writerow({key: _sanitize_csv_cell(value) for key, value in row.items()})
+
+
 def validate_input(path: Path) -> str | None:
     """Причина отказа по входному файлу либо ``None``, если файл пригоден.
 
@@ -215,11 +312,14 @@ def run_offline(
     if write_csv:
         csv_path = out_dir / RUN_BATCH_CSV_NAME
         _write_csv(predictions, csv_path)
+    review_path = out_dir / RUN_BATCH_REVIEW_CSV_NAME
+    _write_review_csv(predictions, review_path)
     return {
         "total": len(predictions),
         "errors": sum(1 for _, result in predictions if result.status.value == "error"),
         "jsonl": jsonl_path,
         "csv": csv_path,
+        "review_csv": review_path,
     }
 
 

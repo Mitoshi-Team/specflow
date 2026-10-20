@@ -289,6 +289,9 @@ GENERIC_SCHEMA_VERSION = "1.0.0"
 CONFLICT_FEATURE_KEY = "conflict"
 """Ключ признака в ``AttributeCandidate.features``, отмечающий конфликт значений."""
 
+NER_CHARACTERISTIC_FEATURE_KEY = "characteristic"
+"""Ключ в ``AttributeCandidate.features``: имя характеристики из NER-пары."""
+
 # --- Grounding Validation (Этап 9) -------------------------------------------
 
 DECIMAL_COMMA_PATTERN = r"(?<=\d),(?=\d)"
@@ -756,6 +759,33 @@ RUN_BATCH_CSV_NAME = "predictions.csv"
 
 RUN_BATCH_CSV_BASE_COLUMNS = ("product_id", "title", "category", "needs_review", "status")
 """Колонки PredictionRow до пар «атрибут/уверенность» (порядок по frontend.md, 4)."""
+
+RUN_BATCH_REVIEW_CSV_NAME = "needs_review.csv"
+"""Имя CSV-выгрузки очереди ручной проверки (пишется всегда)."""
+
+REVIEW_CSV_COLUMNS = (
+    "product_id",
+    "category_name",
+    "status",
+    "reason",
+    "attribute_code",
+    "characteristic",
+    "raw_value",
+    "normalized_value",
+    "confidence",
+    "ner_score",
+    "match_score",
+    "is_new_field",
+    "extraction_method",
+    "evidence_text",
+    "span_start",
+    "span_end",
+    "decision",
+)
+"""Колонки review-выгрузки: одна строка на причину ручной проверки.
+
+``decision`` — пустая колонка для ручных отметок при разборе очереди.
+"""
 
 EVALUATE_THRESHOLD_GRID = (0.70, 0.80, 0.90)
 """Сетка порога авто-принятия для отчёта о доле ручной проверки."""

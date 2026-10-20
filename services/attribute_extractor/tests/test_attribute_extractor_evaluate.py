@@ -260,3 +260,19 @@ def test_main_writes_errors_file(tmp_path: Path) -> None:
 def test_main_missing_gold_fails(tmp_path: Path) -> None:
     exit_code = evaluate.main(["--gold", str(tmp_path / "absent.jsonl")])
     assert exit_code == 1
+
+
+def test_new_field_share_counts_new_field_candidates() -> None:
+    """Доля кандидатов с is_new_field — метрика дрейфа каталога (§8)."""
+    results = [
+        {"attributes": [{"is_new_field": True}, {"is_new_field": False}]},
+        {"attributes": []},
+        {"attributes": [{"is_new_field": False}, {"is_new_field": False}]},
+    ]
+    assert evaluate.new_field_share(results) == 0.25
+    assert evaluate.new_field_share([]) == 0.0
+
+
+def test_build_report_includes_new_field_share() -> None:
+    report = evaluate.build_report([], [])
+    assert report["new_field_share"] == 0.0

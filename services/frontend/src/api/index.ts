@@ -6,6 +6,8 @@
 import type {
   BatchExtractRequest,
   BatchExtractResponse,
+  BatchListParams,
+  BatchListResponse,
   CategoryListResponse,
   CategorySchema,
   ConfigResponse,
@@ -14,6 +16,7 @@ import type {
   InfoResponse,
   ListCategoriesParams,
   ProductCardRequest,
+  StoredBatchResponse,
 } from "../schemas/api";
 import { request } from "./client";
 
@@ -42,6 +45,25 @@ export function extractBatch(
     body: payload,
     signal,
   });
+}
+
+/** GET /batches — история сохранённых батчей, новые первыми (раздел 4.8). */
+export function listBatches(
+  params: BatchListParams = {},
+  signal?: AbortSignal,
+): Promise<BatchListResponse> {
+  return request<BatchListResponse>("/batches", { query: params, signal });
+}
+
+/** GET /batches/{batch_id} — сохранённый батч по идентификатору (раздел 4.9). */
+export function getBatch(
+  batchId: string,
+  signal?: AbortSignal,
+): Promise<StoredBatchResponse> {
+  return request<StoredBatchResponse>(
+    `/batches/${encodeURIComponent(batchId)}`,
+    { signal },
+  );
 }
 
 /** GET /categories — список категорий со схемами. */

@@ -61,6 +61,8 @@ services/frontend/
 | Метод | URL | Назначение |
 | --- | --- | --- |
 | `POST` | `/api/v1/extract/batch` | Пакетная обработка загруженных карточек |
+| `GET` | `/api/v1/batches` | История батчей (панель на странице результатов) |
+| `GET` | `/api/v1/batches/{batch_id}` | Сохранённый батч по id (`/results?batch_id=`) |
 | `GET` | `/api/v1/categories` | Выбор категории/просмотр схемы (опц.) |
 
 ## 4. Типизация (TypeScript)
@@ -130,6 +132,8 @@ export type BatchExtractResponse = {
   errors: number
   results: ExtractionResponseItem[]
   processing_time_ms_total?: number
+  // false — батч не сохранён в серверной истории (api_contract.md, 3.5)
+  persisted?: boolean
 }
 ```
 
@@ -147,7 +151,7 @@ export type BatchExtractResponse = {
 1. Нажатие «Обработать».
 2. Блокировка UI + индикатор загрузки, прогресс «обработано/всего».
 3. POST `/api/v1/extract/batch` с `items`, `batch_size` (по умолчанию 10–20, макс. 50).
-4. При успехе — переход к результатам.
+4. При успехе — батч сохранён сервером: переход к результатам с `?batch_id=` (батч подгружается из серверной истории); при `persisted=false` — переход без параметра и предупреждение о риске потери.
 5. При ошибке — сообщение с детализацией.
 
 ### Сценарий 3. Просмотр результатов
@@ -156,6 +160,8 @@ export type BatchExtractResponse = {
 2. Раскрывающийся блок атрибутов: `attribute_code`, `normalized_value`, `confidence`, `extraction_method`, `evidence_text`, `source_spans`.
 3. Визуальная индикация: `needs_review=true` — акцент, `confidence < threshold` — выделение, `error` — красный.
 4. Показ `pipeline_version`, `batch_id`, сводки (`total/ok/low_confidence/errors`).
+5. Панель «Предыдущие батчи»: список с сервера (`GET /api/v1/batches`, 10 последних), постраничная подгрузка кнопкой «Показать ещё» (следующие 10 через `limit`/`offset`), под списком счётчик «Показано X батчей из Y»; переход к любому сохранённому батчу; сбой загрузки — видимое сообщение, а не молчаливое подавление.
+6. Если батч не найден на сервере (`?batch_id=` → 404) или `persisted=false` — предупреждение и фолбэк на локальную копию (localStorage).
 
 ### Сценарий 4. Экспорт CSV (PredictionRow)
 
@@ -209,7 +215,7 @@ export type BatchExtractResponse = {
 | `useBatchExtract()` | Отправка батча с состоянием loading/error/progress |
 | `useFileParser()` | Парсинг CSV/JSON, нормализация, валидация |
 | `useCsvExport()` | Генерация PredictionRow CSV |
-| `useLocalStorage()` | Сохранение последнего батча (опц.) |
+| `useLocalStorage()` | Локальная копия последнего батча — фолбэк серверной истории (запись возвращает успех; сбой не подавляется молча) |
 
 ## 8. Визуализация и UX
 
@@ -299,6 +305,7 @@ docker compose up --build  # единый стек: http://localhost/
 - [ ] Загрузка CSV/JSON, предпросмотр работает.
 - [ ] Валидация минимального набора полей с понятным сообщением.
 - [ ] Батч-обработка через `/api/v1/extract/batch`, прогресс.
+- [ ] Результаты доступны с сервера по `?batch_id=`; история батчей на странице результатов (`GET /api/v1/batches`).
 - [ ] Результаты с `attribute_code`, `normalized_value`, `confidence`, `extraction_method`, `needs_review`.
 - [ ] Подсветка low_confidence/needs_review.
 - [ ] Экспорт CSV в формате `PredictionRow`.

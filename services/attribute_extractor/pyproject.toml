@@ -9,6 +9,7 @@ dependencies = [
     "pydantic-settings>=2.7",
     "httpx>=0.28",
     "specflow-contracts",
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]

@@ -92,20 +92,6 @@ export default function BatchControls({
   const canStart = hasCards && batchSizeValid && thresholdValid && !isRunning;
   const partialErrors = status === "success" ? (response?.errors ?? 0) : 0;
 
-  let statusText: string;
-  if (isRunning) {
-    statusText = t("batch.status.running");
-  } else if (status === "success") {
-    statusText =
-      partialErrors > 0
-        ? t("batch.status.doneWithErrors")
-        : t("batch.status.done");
-  } else if (status === "error") {
-    statusText = t("batch.status.error");
-  } else {
-    statusText = t("batch.status.idle");
-  }
-
   const handleStart = (): void => {
     if (!canStart) {
       return;
@@ -231,14 +217,12 @@ export default function BatchControls({
       ) : null}
 
       <div className="batch__state">
-        <div className="batch__status-row">
-          <span className="batch__status-text" role="status">
-            {statusText}
-          </span>
-          {showProgress ? (
-            <span className="batch__progress-count">{progressLabel}</span>
-          ) : null}
-        </div>
+        {/* Статусная строка убрана: во время обработки состояние показывает
+            оверлей загрузки на уровне страницы (PageHome, design.md,
+            «Прогресс и состояние батча»). Здесь остаётся только прогресс. */}
+        {showProgress ? (
+          <span className="batch__progress-count">{progressLabel}</span>
+        ) : null}
 
         {showProgress ? (
           <div

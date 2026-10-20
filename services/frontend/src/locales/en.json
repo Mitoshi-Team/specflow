@@ -14,7 +14,18 @@
     "results": {
       "title": "Results",
       "description": "Batch processing results for product cards.",
-      "empty": "Results will appear after a batch is processed."
+      "empty": "Results will appear after a batch is processed.",
+      "notPersisted": "The server did not save this batch to history: results will not survive a page reload. Export the CSV if you need the data.",
+      "localFallback": "Browser local storage is unavailable — results are shown only in this tab and will not survive a page reload.",
+      "history": {
+        "title": "Previous batches",
+        "empty": "No saved batches yet — run processing on the home page.",
+        "retry": "Retry",
+        "row": "{{total}} cards · ok {{ok}} · low confidence {{lowConfidence}} · errors {{errors}}",
+        "showMore": "Show more",
+        "shown_one": "Showing {{count}} of {{total}} batch",
+        "shown_other": "Showing {{count}} of {{total}} batches"
+      }
     }
   },
   "api": {
@@ -98,13 +109,6 @@
     "errorsCount": "Processing errors: {{count}}",
     "rangeHint": "Allowed: {{min}} to {{max}}",
     "rangeError": "Value out of range from {{min}} to {{max}}",
-    "status": {
-      "idle": "Waiting to start",
-      "running": "Processing",
-      "done": "Completed",
-      "doneWithErrors": "Completed with errors",
-      "error": "Error"
-    },
     "batchSize": {
       "label": "Batch size"
     },

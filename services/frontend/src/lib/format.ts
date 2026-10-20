@@ -20,3 +20,21 @@ export function formatFileSize(bytes: number): string {
   const digits = unitIndex === 0 || Number.isInteger(value) ? 0 : 1;
   return `${value.toFixed(digits)} ${SIZE_UNITS[unitIndex]}`;
 }
+
+/**
+ * Дата и время из ISO-строки сервера в формате локали пользователя.
+ *
+ * Локаль передаётся из i18n (язык интерфейса), поэтому даты истории батчей
+ * отображаются в привычном для пользователя виде. Некорректная строка
+ * возвращается как есть — показать сырые данные честнее, чем молча скрыть.
+ */
+export function formatDateTime(iso: string, locale: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}

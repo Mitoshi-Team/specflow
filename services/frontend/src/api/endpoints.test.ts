@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extract,
   extractBatch,
+  getBatch,
   getCategory,
   getConfig,
   getHealth,
   getInfo,
+  listBatches,
   listCategories,
 } from "./index";
 
@@ -85,5 +87,29 @@ describe("endpoints", () => {
   it("getConfig → GET /config", async () => {
     await getConfig();
     expect(lastCall().url).toBe("/api/v1/config");
+  });
+
+  it("listBatches → GET /batches с query истории", async () => {
+    await listBatches({ limit: 10, offset: 20 });
+
+    const { url, method } = lastCall();
+    expect(url).toBe("/api/v1/batches?limit=10&offset=20");
+    expect(method).toBe("GET");
+  });
+
+  it("listBatches без параметров → GET /batches без query", async () => {
+    await listBatches();
+
+    expect(lastCall().url).toBe("/api/v1/batches");
+  });
+
+  it("getBatch → GET /batches/{batch_id} с кодированием", async () => {
+    const batchId = "батч / 1";
+
+    await getBatch(batchId);
+
+    expect(lastCall().url).toBe(
+      `/api/v1/batches/${encodeURIComponent(batchId)}`,
+    );
   });
 });

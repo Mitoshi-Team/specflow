@@ -704,19 +704,6 @@ body {
   gap: var(--space-2);
 }
 
-.batch__status-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.batch__status-text {
-  font-size: var(--text-body);
-  font-weight: 500;
-}
-
 .batch__progress-count {
   font-family: var(--font-mono);
   font-size: var(--text-caption);
@@ -867,6 +854,38 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* --- Оверлей обработки батча (design.md, «Прогресс и состояние батча») --- */
+
+.loading-overlay {
+  /* fixed: покрывает весь viewport, включая верхнюю панель (z-index: 20) */
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Замыливание фона: полупрозрачная подложка поверх страницы + blur
+     содержимого под ней; сам оверлей перехватывает клики, блокируя ввод
+     на время обработки батча */
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Единственный ребёнок оверлея — строго в центре (flex center). Крупнее
+   общего Loader (16px) и акцентный (--danger): видимой подписи нет,
+   роль и aria-label объявляют состояние скринридеру (PageHome). */
+.loading-overlay__spinner {
+  width: 56px;
+  height: 56px;
+  border: 5px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-top-color: var(--danger);
+  border-radius: 50%;
+  /* Крупному кольцу нужен чуть более спокойный темп, чем loader-spin
+     у мелкого спиннера (0.8s) */
+  animation: loader-spin 1s linear infinite;
 }
 
 /* --- Сводка валидации (frontend.md, 6.3) --- */
@@ -1357,6 +1376,75 @@ body {
   background: var(--surface-2);
   border: var(--border-width) dashed var(--border-subtle);
   border-radius: var(--radius-panel);
+}
+
+/* --- Предупреждение о несохранённых результатах --- */
+
+.notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-body);
+  color: var(--text-primary);
+  background: var(--danger-soft);
+  border: var(--border-width) solid var(--danger);
+  border-radius: var(--radius-control);
+}
+
+/* --- История батчей (страница результатов) --- */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history__link {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3);
+  color: var(--text-primary);
+  text-decoration: none;
+  background: var(--surface-2);
+  border: var(--border-width) solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  transition: border-color var(--transition-fast);
+}
+
+.history__link:hover {
+  border-color: var(--border);
+}
+
+.history__date {
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.history__summary {
+  font-size: var(--text-body);
+}
+
+/* Футер пагинации истории: счётчик «показано из всего» + «Показать ещё»
+   в одну строку через небольшой отступ; margin-top отделяет футер от
+   списка (отступ и над счётчиком, и над ссылкой) */
+.history__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-top: var(--space-3);
+}
+
+.history__shown {
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Адаптивность (design.md, раздел 10) --- */

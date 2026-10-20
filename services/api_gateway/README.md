@@ -37,6 +37,8 @@ uv run uvicorn api_gateway.main:app --reload
 | GET | `/api/v1/health` | Проверка живости самого шлюза (локально, без upstream) |
 | POST | `/api/v1/extract` | Проксируется в сервис извлечения |
 | POST | `/api/v1/extract/batch` | Проксируется в сервис извлечения |
+| GET | `/api/v1/batches` | Проксируется в сервис извлечения (история батчей) |
+| GET | `/api/v1/batches/{batch_id}` | Проксируется в сервис извлечения (сохранённый батч) |
 | GET | `/api/v1/categories` | Проксируется в сервис извлечения |
 | GET | `/api/v1/categories/{category}` | Проксируется в сервис извлечения |
 | GET | `/api/v1/info` | Проксируется в сервис извлечения |

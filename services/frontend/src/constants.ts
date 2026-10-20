@@ -85,8 +85,15 @@ export const MAX_CONFIDENCE_THRESHOLD = 1;
 export const CONFIDENCE_THRESHOLD_STEP = 0.01;
 
 /**
+ * Сколько последних батчей показывать в панели истории на странице
+ * результатов (`GET /batches`, api_contract.md, 4.8).
+ */
+export const BATCH_HISTORY_LIMIT = 10;
+
+/**
  * Ключ localStorage для последнего успешного батча (frontend.md, §7:
- * «useLocalStorage — сохранение последнего батча»). Нужен, чтобы результат не
- * терялся при переходах между страницами и перезагрузке.
+ * «useLocalStorage — фолбэк серверной истории»). Сервер хранит историю
+ * батчей (4.8/4.9); локальная копия нужна как фолбэк для текущей сессии,
+ * dev-режима без БД и первого перехода на страницу результатов.
  */
 export const LAST_BATCH_STORAGE_KEY = "specflow.lastBatch";

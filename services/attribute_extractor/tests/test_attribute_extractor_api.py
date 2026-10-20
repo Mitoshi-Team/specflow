@@ -306,6 +306,162 @@ def test_category_by_name_returns_schema_or_404() -> None:
     assert "Смартфоны" in body["detail"], "деталь должна называть невestedённую категорию"
 
 
+# --- GET /categories с загруженным реестром ----------------------------------
+
+
+def _schemas_payload() -> dict[str, Any]:
+    """Артефакт реестра (формат build_category_schemas.py) для API-тестов.
+
+    Схемы идут в отсортированном порядке сборщика (имя категории, затем id).
+    """
+    return {
+        "version": "1.0.0",
+        "schemas": [
+            {
+                "category": "Ноутбуки",
+                "category_id": "2",
+                "schema_version": "1.0.0",
+                "required_attributes": [
+                    {
+                        "code": "brand",
+                        "value_type": "string",
+                        "name_ru": "Бренд",
+                        "is_required": True,
+                    },
+                ],
+                "optional_attributes": [],
+            },
+            {
+                "category": "Смартфоны",
+                "category_id": "1",
+                "schema_version": "1.0.0",
+                "required_attributes": [
+                    {
+                        "code": "brand",
+                        "value_type": "string",
+                        "name_ru": "Бренд",
+                        "is_required": True,
+                    },
+                    {
+                        "code": "color",
+                        "value_type": "enum",
+                        "name_ru": "Цвет",
+                        "is_required": True,
+                    },
+                ],
+                "optional_attributes": [
+                    {
+                        "code": "storage",
+                        "value_type": "unit_value",
+                        "name_ru": "Встроенная память",
+                        "is_required": False,
+                        "unit": "ГБ",
+                    },
+                ],
+            },
+        ],
+    }
+
+
+def _app_with_registry(monkeypatch, tmp_path: FsPath, *, text: str | None = None):
+    """Приложение, стартующее с явного артефакта реестра (env-переменная)."""
+    artifact = tmp_path / "category_schemas.json"
+    content = text if text is not None else json.dumps(_schemas_payload(), ensure_ascii=False)
+    artifact.write_text(content, encoding="utf-8")
+    monkeypatch.setenv("EXTRACTOR_CATEGORY_SCHEMAS_PATH", str(artifact))
+    return create_app()
+
+
+def test_categories_list_serves_registered_schemas_first(monkeypatch, tmp_path) -> None:
+    """Список: generic первым, затем реальные схемы из артефакта (api_contract 4.3)."""
+    registry_app = _app_with_registry(monkeypatch, tmp_path)
+    with TestClient(registry_app) as client:
+        body = client.get(_path(CATEGORIES_ENDPOINT)).json()
+
+    assert set(body) == {"items", "total"}
+    assert body["total"] == len(body["items"]) == 3
+    names = [schema["category"] for schema in body["items"]]
+    assert names == ["generic", "Ноутбуки", "Смартфоны"]
+    smartphones = body["items"][2]
+    assert smartphones["category_id"] == "1"
+    assert [attr["code"] for attr in smartphones["required_attributes"]] == ["brand", "color"]
+    assert [attr["code"] for attr in smartphones["optional_attributes"]] == ["storage"]
+
+
+def test_categories_filter_is_case_insensitive(monkeypatch, tmp_path) -> None:
+    """Фильтр category сравнивает имена без учёта регистра (api_contract 4.3)."""
+    registry_app = _app_with_registry(monkeypatch, tmp_path)
+    with TestClient(registry_app) as client:
+        lower = client.get(_path(CATEGORIES_ENDPOINT), params={"category": "смартфоны"}).json()
+        upper = client.get(_path(CATEGORIES_ENDPOINT), params={"category": "СМАРТФОНЫ"}).json()
+        generic = client.get(_path(CATEGORIES_ENDPOINT), params={"category": "Generic"}).json()
+        missing = client.get(_path(CATEGORIES_ENDPOINT), params={"category": "Смартфон"}).json()
+
+    assert lower["total"] == 1 and lower["items"][0]["category"] == "Смартфоны"
+    assert upper["total"] == 1 and upper["items"][0]["category"] == "Смартфоны"
+    assert generic["total"] == 1 and generic["items"][0]["category"] == "generic"
+    assert missing == {"items": [], "total": 0}
+
+
+def test_categories_pagination_slices_mixed_list(monkeypatch, tmp_path) -> None:
+    """Пагинация режет общий список generic + реальные схемы."""
+    registry_app = _app_with_registry(monkeypatch, tmp_path)
+    with TestClient(registry_app) as client:
+        second = client.get(_path(CATEGORIES_ENDPOINT), params={"limit": 1, "offset": 1}).json()
+        beyond = client.get(_path(CATEGORIES_ENDPOINT), params={"limit": 5, "offset": 10}).json()
+        empty_page = client.get(_path(CATEGORIES_ENDPOINT), params={"limit": 0}).json()
+
+    assert second["total"] == 3
+    assert [schema["category"] for schema in second["items"]] == ["Ноутбуки"]
+    assert beyond == {"items": [], "total": 3}
+    assert empty_page == {"items": [], "total": 3}
+
+
+def test_category_detail_serves_registered_schema_case_insensitive(monkeypatch, tmp_path) -> None:
+    """Detail: реестр до generic, регистронезависимо; неизвестная → 404."""
+    registry_app = _app_with_registry(monkeypatch, tmp_path)
+    with TestClient(registry_app) as client:
+        registered = client.get(f"{_path(CATEGORIES_ENDPOINT)}/Смартфоны")
+        lowercase = client.get(f"{_path(CATEGORIES_ENDPOINT)}/смартфоны")
+        generic = client.get(f"{_path(CATEGORIES_ENDPOINT)}/generic")
+        unknown = client.get(f"{_path(CATEGORIES_ENDPOINT)}/Книги")
+
+    assert registered.status_code == 200
+    assert registered.json()["category_id"] == "1"
+    assert lowercase.status_code == 200
+    assert lowercase.json()["category"] == "Смартфоны"
+    assert generic.status_code == 200
+    assert generic.json()["category"] == "generic"
+    assert unknown.status_code == 404
+    _assert_error_envelope(unknown.json(), code="not_found")
+
+
+def test_corrupt_registry_artifact_degrades_to_generic(monkeypatch, tmp_path) -> None:
+    """Битый артефакт не роняет сервис: только generic, схемы не выдумываются."""
+    registry_app = _app_with_registry(monkeypatch, tmp_path, text="{не json")
+    with TestClient(registry_app) as client:
+        listed = client.get(_path(CATEGORIES_ENDPOINT)).json()
+        detail = client.get(f"{_path(CATEGORIES_ENDPOINT)}/Смартфоны")
+
+    assert listed["total"] == len(listed["items"]) == 1
+    assert listed["items"][0]["category"] == "generic"
+    assert detail.status_code == 404
+    _assert_error_envelope(detail.json(), code="not_found")
+
+
+def test_missing_registry_artifact_degrades_to_generic(monkeypatch, tmp_path) -> None:
+    """Нет артефакта (EDA не прогонялась) → сервис работает с generic-схемой."""
+    monkeypatch.setenv("EXTRACTOR_CATEGORY_SCHEMAS_PATH", str(tmp_path / "absent.json"))
+    registry_app = create_app()
+    with TestClient(registry_app) as client:
+        listed = client.get(_path(CATEGORIES_ENDPOINT)).json()
+        health = client.get(f"{settings.api_prefix}{HEALTH_ENDPOINT}")
+
+    assert listed["total"] == len(listed["items"]) == 1
+    assert listed["items"][0]["category"] == "generic"
+    assert health.status_code == 200
+
+
 def test_unknown_route_returns_404_envelope() -> None:
     """Неизвестный маршрут → 404 в форме ErrorResponse (а не голый detail Starlette)."""
     with TestClient(app) as client:

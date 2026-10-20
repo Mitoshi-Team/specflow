@@ -5,8 +5,18 @@ Rate limiting выключен для общего прогона: тесты д
 недетерминированными. Сам rate-limiting проверяется отдельным тестом на
 изолированном приложении с явно заданным лимитом (env-переменные
 подхватываются на момент сборки приложения).
+
+Реестр схем категорий пинуется на заведомо несуществующий путь: на машине
+может лежать собранный ``data/category_schemas.json``, и без пина тесты
+``/categories`` зависели бы от локального артефакта. Сценарий с реестром
+покрывается отдельными тестами, явно подставляющими свой артефакт.
 """
 
 import os
+from pathlib import Path as FsPath
 
 os.environ.setdefault("EXTRACTOR_RATE_LIMIT_REQUESTS", "0")
+os.environ.setdefault(
+    "EXTRACTOR_CATEGORY_SCHEMAS_PATH",
+    str(FsPath(__file__).resolve().parent / "_missing_category_schemas.json"),
+)

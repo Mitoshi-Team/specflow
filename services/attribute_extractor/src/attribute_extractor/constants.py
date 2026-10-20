@@ -706,6 +706,29 @@ CATEGORY_LIST_DEFAULT_LIMIT = 50
 
 CATEGORY_LIST_MAX_LIMIT = 200
 
+# --- Реестр схем категорий (scripts/build_category_schemas.py) ----------------
+
+CATEGORY_SCHEMA_VERSION = "1.0.0"
+"""Версия схем, строящихся скриптом ``build_category_schemas.py``."""
+
+DEFAULT_CATEGORY_SCHEMAS_PATH = "data/category_schemas.json"
+"""Путь к артефакту реестра схем категорий (собирается из EDA/cache, gitignored)."""
+
+CATEGORY_SCHEMA_REQUIRED_SHARE = 0.5
+"""Доля карточек категории, начиная с которой поле считается обязательным.
+
+Заполненность поля (fill rate) >= доли → атрибут попадает в
+``required_attributes`` (управляет rules-fallback, Этап 7); меньшая, но
+ненулевая доля → ``optional_attributes``.
+"""
+
+CATEGORY_SCHEMA_MIN_CARDS = 10
+"""Минимум карточек категории, чтобы по ней строить схему.
+
+Категории меньшего размера считаются шумом: оценки заполненности на них
+недостоверны, карточки получают generic-fallback.
+"""
+
 # --- Офлайн-прогон (scripts/run_batch.py) -----------------------------------
 
 RUN_BATCH_INPUT_SUFFIXES = (".csv", ".tsv", ".json", ".jsonl")

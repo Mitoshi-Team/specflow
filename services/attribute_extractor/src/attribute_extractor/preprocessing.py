@@ -6,9 +6,11 @@
 """
 
 import html
+import json
 import re
 from collections import Counter
 from collections.abc import Iterable
+from pathlib import Path
 
 from pydantic import BaseModel
 
@@ -265,14 +267,35 @@ class SchemaRegistry:
     def __init__(self, schemas: Iterable[CategorySchema] | None = None) -> None:
         self._by_id: dict[str, CategorySchema] = {}
         self._by_name: dict[str, CategorySchema] = {}
+        self._schemas: list[CategorySchema] = []
         for schema in schemas or ():
             self.register(schema)
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> "SchemaRegistry":
+        """Загрузить реестр из JSON-артефакта ``build_category_schemas.py``.
+
+        Формат: ``{"version": str, "schemas": [CategorySchema, ...]}``.
+        Отсутствие файла → ``FileNotFoundError``, битый формат/валидация →
+        исключение — вызывающий код (загрузка на старте сервиса) решает,
+        деградировать ли до пустого реестра и generic-fallback.
+        """
+        with Path(path).open(encoding="utf-8") as file:
+            data = json.load(file)
+        if not isinstance(data, dict) or not isinstance(data.get("schemas"), list):
+            raise ValueError(f"Некорректный формат реестра схем категорий: {path}")
+        return cls(CategorySchema.model_validate(item) for item in data["schemas"])
 
     def register(self, schema: CategorySchema) -> None:
         """Добавить схему в индексы по идентификатору и названию."""
         if schema.category_id:
             self._by_id[schema.category_id] = schema
         self._by_name[schema.category.strip().lower()] = schema
+        self._schemas.append(schema)
+
+    def all(self) -> list[CategorySchema]:
+        """Все зарегистрированные схемы в порядке регистрации (без generic)."""
+        return list(self._schemas)
 
     def get(
         self, category_id: str | None = None, category_name: str | None = None

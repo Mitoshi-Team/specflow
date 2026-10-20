@@ -30,7 +30,7 @@ from attribute_extractor.errors import BatchSizeMismatchError, CategoryNotFoundE
 from attribute_extractor.extractors import build_default_registry
 from attribute_extractor.extractors.registry import ExtractorRegistry
 from attribute_extractor.pipeline import ExtractPipeline
-from attribute_extractor.preprocessing import generic_schema
+from attribute_extractor.preprocessing import CardPreprocessor, SchemaRegistry, generic_schema
 from attribute_extractor.rate_limit import RateLimitMiddleware
 from specflow_contracts import (
     BatchExtractRequest,
@@ -61,6 +61,25 @@ _CATEGORY_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 
+def _load_schema_registry(path: str) -> SchemaRegistry:
+    """Реестр схем категорий из артефакта ``build_category_schemas.py`` (старт сервиса).
+
+    Отсутствующий или битый артефакт не роняет сервис: причина фиксируется
+    в логе, сервис стартует с пустым реестром — карточки получают
+    generic-fallback (сценарий «EDA ещё не прогонялся»).
+    """
+    try:
+        registry = SchemaRegistry.from_file(path)
+    except FileNotFoundError:
+        logger.info("Артефакт схем категорий не найден (%s): generic-fallback", path)
+        return SchemaRegistry()
+    except Exception:  # noqa: BLE001 — битый артефакт деградирует до generic, но с логом
+        logger.exception("Не удалось загрузить реестр схем категорий из %s: generic-fallback", path)
+        return SchemaRegistry()
+    logger.info("Загружено схем категорий: %d (%s)", len(registry.all()), path)
+    return registry
+
+
 def create_app() -> FastAPI:
     """Собирает и настраивает приложение FastAPI.
 
@@ -70,7 +89,12 @@ def create_app() -> FastAPI:
     """
     app_settings = Settings()
     registry: ExtractorRegistry = build_default_registry()
-    pipeline = ExtractPipeline(settings=app_settings, registry=registry)
+    schema_registry = _load_schema_registry(app_settings.category_schemas_path)
+    pipeline = ExtractPipeline(
+        settings=app_settings,
+        registry=registry,
+        preprocessor=CardPreprocessor(schemas=schema_registry),
+    )
     started_at = time.monotonic()
 
     app = FastAPI(title=app_settings.app_name, docs_url="/docs", redoc_url="/redoc")
@@ -166,13 +190,17 @@ def create_app() -> FastAPI:
         limit: int = Query(CATEGORY_LIST_DEFAULT_LIMIT, ge=0, le=CATEGORY_LIST_MAX_LIMIT),
         offset: int = Query(0, ge=0),
     ) -> dict[str, Any]:
-        """Список зарегистрированных схем категорий.
+        """Список зарегистрированных схем категорий плюс generic-схема.
 
-        Реестр схем пока пуст: отдаётся только generic-схема (придумывать
-        фейковые схемы нельзя — задача 1.3).
+        Реестр загружается на старте из ``category_schemas_path`` (артефакт
+        ``scripts/build_category_schemas.py``); при пустом реестре отдаётся
+        только generic-схема. ``category`` фильтрует по имени
+        (регистронезависимо), пагинация — limit/offset (api_contract.md, 4.3).
         """
-        known = category in (None, GENERIC_CATEGORY)
-        items = [generic_schema().model_dump()] if known else []
+        items = [generic_schema().model_dump(), *(s.model_dump() for s in schema_registry.all())]
+        if category is not None:
+            wanted = category.strip().casefold()
+            items = [item for item in items if item["category"].strip().casefold() == wanted]
         return {"items": items[offset : offset + limit], "total": len(items)}
 
     @app.get(
@@ -182,7 +210,10 @@ def create_app() -> FastAPI:
         tags=["categories"],
     )
     async def category_detail(category: str) -> CategorySchema:
-        """Схема категории; 404 ErrorResponse, если не найдена."""
+        """Схема категории из реестра; generic-схема либо 404 ErrorResponse."""
+        schema = schema_registry.get(category_name=category)
+        if schema is not None:
+            return schema
         if category == GENERIC_CATEGORY:
             return generic_schema()
         raise CategoryNotFoundError(category)

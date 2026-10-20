@@ -67,9 +67,8 @@ class FieldCatalog:
             self._entries[e.code] = e
 
     @classmethod
-    def from_store(cls, store: CatalogStore) -> FieldCatalog:
-        """Загрузить каталог из персистентного хранилища (пустой, если нет данных)."""
-        data = store.load_catalog()
+    def from_dict(cls, data: dict) -> FieldCatalog:
+        """Собрать каталог из JSON-структуры (формат ``CatalogStore``)."""
         entries = [
             FieldCatalogEntry(
                 code=item["code"],
@@ -83,6 +82,11 @@ class FieldCatalog:
             if item.get("code")
         ]
         return cls(entries)
+
+    @classmethod
+    def from_store(cls, store: CatalogStore) -> FieldCatalog:
+        """Загрузить каталог из персистентного хранилища (пустой, если нет данных)."""
+        return cls.from_dict(store.load_catalog())
 
     def all(self) -> list[FieldCatalogEntry]:
         return list(self._entries.values())

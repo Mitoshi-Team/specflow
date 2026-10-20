@@ -308,6 +308,10 @@ seller-атрибутах и недостижимые из текста, иск�
   `FieldResolver` (векторный матч + авто-добавление полей).
 - `src/attribute_extractor/catalog_store.py` — атомарная персистентность
   каталога и блоклиста.
+- `src/attribute_extractor/category_schema_builder.py` — сборка реестра
+  схем категорий из статистики EDA/cache (ядро `scripts/build_category_schemas.py`):
+  fill-rate → required/optional, резолв имён в канонические коды, пороги из
+  `constants.py`; каталог полей во время сборки не персистится.
 - `src/attribute_extractor/slugify.py` — генерация кодов полей (snake_case).
 - `src/attribute_extractor/merging.py` — мёржа кандидатов (Этап 8): группировка
   по `(attribute_code, normalized_value)`, max confidence, конфликт → флаг.
@@ -354,14 +358,28 @@ python services/attribute_extractor/scripts/evaluate.py \
   --predictions /tmp/preds/predictions.jsonl --out /tmp/metrics.json
 ```
 
+Реестр схем категорий для `/categories` и Этапа 1 собирается из
+статистики каталога (`EDA/cache`, результат `EDA/src/run.py`):
+
+```bash
+python services/attribute_extractor/scripts/build_category_schemas.py
+```
+
+Артефакт `data/category_schemas.json` (gitignored) загружается сервисом на
+старте (`EXTRACTOR_CATEGORY_SCHEMAS_PATH`). Отсутствующий или битый артефакт
+не роняет сервис: причина пишется в лог, `/categories` отдаёт только
+generic-схему, карточки получают generic-fallback (пороги —
+`CATEGORY_SCHEMA_REQUIRED_SHARE`/`CATEGORY_SCHEMA_MIN_CARDS` в
+`constants.py`).
+
 ## 7. Эндпоинты
 
 | Метод | Путь | Описание |
 | --- | --- | --- |
 | POST | `/api/v1/extract` | Извлечение атрибутов одной карточки |
 | POST | `/api/v1/extract/batch` | Пакетное извлечение (частичный успех, `threshold_override`) |
-| GET | `/api/v1/categories` | Список схем категорий (`category`, `limit` ≤ 200, `offset`) |
-| GET | `/api/v1/categories/{category}` | Схема категории (404 ErrorResponse, если не найдена) |
+| GET | `/api/v1/categories` | Список схем: generic + реестр (`category` регистронезависимо, `limit` ≤ 200, `offset`) |
+| GET | `/api/v1/categories/{category}` | Схема из реестра, иначе generic; 404 ErrorResponse, если не найдена |
 | GET | `/api/v1/health` | Проверка работоспособности (`degraded`, пока NER не загружен) |
 | GET | `/api/v1/info` | Информация о сервисе (версии, методы, пороги, features) |
 | GET | `/api/v1/config` | Текущие пороги уверенности (read-only, без секретов) |

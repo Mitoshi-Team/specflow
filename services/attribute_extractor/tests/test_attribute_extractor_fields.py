@@ -38,6 +38,22 @@ def test_field_resolver_new_field_when_below_threshold(tmp_path):
     assert m.matched_code is not None
 
 
+def test_field_resolver_repeated_new_field_stays_new(tmp_path):
+    """Повторный матч по полю, добавленному в память, не превращает его в канон."""
+    vi = vector_index.LexicalVectorIndex()
+    vi.add("color")
+    r = fields.FieldResolver(
+        vector_index=vi,
+        match_threshold=0.9,
+        store=_store(tmp_path),
+    )
+    first = r.resolve("Разрешение по вертикали")
+    second = r.resolve("Разрешение по вертикали")
+    assert first.is_new_field is True
+    assert second.is_new_field is True
+    assert second.matched_code == first.matched_code
+
+
 def test_field_resolver_blocklist(tmp_path):
     r = fields.FieldResolver(
         blocklist=fields.FieldBlocklist(["запчасть"]),

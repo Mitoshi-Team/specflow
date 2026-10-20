@@ -104,6 +104,7 @@ class FieldResolver:
         store: CatalogStore | None = None,
         match_threshold: float = DEFAULT_MATCH_THRESHOLD,
         vector_k: int = DEFAULT_VECTOR_K,
+        persist_new_fields: bool = True,
     ) -> None:
         self.store = store or CatalogStore(DEFAULT_FIELD_CATALOG_PATH, DEFAULT_FIELD_BLOCKLIST_PATH)
         self.catalog = catalog if catalog is not None else FieldCatalog.from_store(self.store)
@@ -113,6 +114,10 @@ class FieldResolver:
         self.vector_index = vector_index or LexicalVectorIndex()
         self.match_threshold = match_threshold
         self.vector_k = vector_k
+        # Слабая разметка/пробы не должны дописывать боевой каталог: новые
+        # поля живут только в памяти (domain-model.md: авто-добавление —
+        # управляемое поведение, а не побочный эффект).
+        self.persist_new_fields = persist_new_fields
         self._index_catalog()
 
     def _index_catalog(self) -> None:
@@ -141,11 +146,15 @@ class FieldResolver:
         if results:
             best_code, best_score = results[0]
             if best_code and best_score >= self.match_threshold:
+                # Поле, добавленное в память ранее как «новое», остаётся
+                # новым и при повторных матчах: иначе потребители (weak
+                # разметка, статистика) примут мусорный код за канонический.
+                entry = self.catalog.get(best_code)
                 return CharacteristicMatch(
                     characteristic=characteristic,
                     matched_code=best_code,
                     match_score=float(best_score),
-                    is_new_field=False,
+                    is_new_field=bool(entry is not None and entry.is_new_field),
                     blocked=False,
                 )
         code = slugify.slugify(characteristic)
@@ -162,6 +171,8 @@ class FieldResolver:
         )
 
     def _persist_new_field(self, code: str, characteristic: str) -> None:
+        if not self.persist_new_fields:
+            return
         try:
             data = self.store.load_catalog()
             entries = data.get("entries", [])

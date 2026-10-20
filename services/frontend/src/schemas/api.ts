@@ -109,6 +109,34 @@ export type BatchExtractResponse = {
   errors: number;
   results: ExtractionResponseItem[];
   processing_time_ms_total?: number;
+  /** Раздел 3.5: false — батч не сохранён в серверной истории. */
+  persisted?: boolean;
+};
+
+/** Раздел 3.9: BatchSummary — краткая сводка сохранённого батча. */
+export type BatchSummary = {
+  batch_id: string;
+  created_at: string;
+  total: number;
+  ok: number;
+  low_confidence: number;
+  errors: number;
+  threshold?: number | null;
+};
+
+/** Раздел 3.10: BatchListResponse — история батчей, новые первыми. */
+export type BatchListResponse = {
+  items: BatchSummary[];
+  total: number;
+};
+
+/** Раздел 3.11: StoredBatchResponse — полностью сохранённый батч. */
+export type StoredBatchResponse = {
+  batch_id: string;
+  created_at: string;
+  threshold?: number | null;
+  cards?: ProductCardRequest[];
+  response: BatchExtractResponse;
 };
 
 /**
@@ -136,6 +164,12 @@ export type CategorySchema = {
 /** Раздел 4.3: параметры запроса GET /categories. */
 export type ListCategoriesParams = {
   category?: string;
+  limit?: number;
+  offset?: number;
+};
+
+/** Раздел 4.8: параметры запроса GET /batches. */
+export type BatchListParams = {
   limit?: number;
   offset?: number;
 };

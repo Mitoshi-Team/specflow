@@ -282,7 +282,8 @@ seller-атрибутах и недостижимые из текста, иск�
 
 - `src/attribute_extractor/main.py` — фабрика приложения `create_app()` и `app`.
 - `src/attribute_extractor/config.py` — настройки Pydantic (`EXTRACTOR_*`):
-  пороги уверенности, лимиты батча, таймауты, параметры NER/вектора.
+  пороги уверенности, лимиты батча, таймауты, параметры NER/вектора,
+  `database_url` — строка подключения к PostgreSQL для истории батчей.
 - `src/attribute_extractor/constants.py` — значения по умолчанию и доменные
   константы (пороги, имена/приоритеты экстракторов, метки NER, версии).
 - `src/attribute_extractor/preprocessing.py` — препроцессинг карточки (Этап 0):
@@ -312,6 +313,10 @@ seller-атрибутах и недостижимые из текста, иск�
   схем категорий из статистики EDA/cache (ядро `scripts/build_category_schemas.py`):
   fill-rate → required/optional, резолв имён в канонические коды, пороги из
   `constants.py`; каталог полей во время сборки не персистится.
+- `src/attribute_extractor/batch_store.py` — серверная история выполненных
+  батчей: протокол `BatchStore`, `PostgresBatchStore` (psycopg 3, DDL и
+  операции над таблицей `batches`) и ограниченный `InMemoryBatchStore` для
+  режима без настроенной БД; ошибки драйвера переводятся в `BatchStoreError`.
 - `src/attribute_extractor/slugify.py` — генерация кодов полей (snake_case).
 - `src/attribute_extractor/merging.py` — мёржа кандидатов (Этап 8): группировка
   по `(attribute_code, normalized_value)`, max confidence, конфликт → флаг.
@@ -319,6 +324,9 @@ seller-атрибутах и недостижимые из текста, иск�
   `structured`/`rule` → `DETERMINISTIC_CONFIDENCE`, `ner` → `ner_score`
   (`ConfidenceCalculator`).
 - `src/attribute_extractor/grounding.py` — подтверждение в тексте (Этап 9).
+- `src/attribute_extractor/weak_markup.py` — слабая разметка NER от
+  seller-атрибутов (distant supervision): поиск спанов значений/имён
+  параметров в тексте, резолв в канонические поля, стратифицированный split.
 - `src/attribute_extractor/normalization.py` — нормализация значений (Этап 6):
   регистр, синонимы, единицы, форматирование, enum-валидация.
 - `src/attribute_extractor/references.py` — справочники (`AttributeVocab`,
@@ -332,6 +340,12 @@ seller-атрибутах и недостижимые из текста, иск�
 ```bash
 uv run uvicorn attribute_extractor.main:app --port 8001 --reload
 ```
+
+Хранилище истории батчей выбирается по `EXTRACTOR_DATABASE_URL`: строка
+`postgresql://user:pass@host:5432/db` включает PostgreSQL (схема создаётся
+идемпотентно при старте/первом обращении), без переменной история хранится
+в памяти процесса и ограничена (`IN_MEMORY_BATCH_LIMIT` записей). Режим
+логируется при старте; в docker-compose строка собирается из `POSTGRES_*`.
 
 Офлайн-прогон файла карточек (CSV/TSV/JSON/JSONL) без HTTP — скрипт
 `scripts/run_batch.py`; настройки пайплайна берутся из переменных
@@ -372,12 +386,42 @@ generic-схему, карточки получают generic-fallback (поро
 `CATEGORY_SCHEMA_REQUIRED_SHARE`/`CATEGORY_SCHEMA_MIN_CARDS` в
 `constants.py`).
 
+### Weak-датасет для NER (distant supervision)
+
+`scripts/make_ner_weak_dataset.py` строит обучающую выборку для NER (Этап 4)
+из структурных полей каталога: seller-параметры YML-офферов плюс `vendor`/
+`model` как псевдопараметры «Бренд»/«Модель». Для каждого параметра, чьё имя
+резолвится `FieldResolver` в каноническое поле (без авто-добавления новых),
+в тексте карточки ищутся вхождения значения (`PROPERTY`) и имени параметра
+(`CHARACTERISTIC`) — спаны слабой разметки. Текст записи — тот же вид, что
+увидит NER в проде: `normalize_text` от `raw_text` с метками секций.
+
+```bash
+python services/attribute_extractor/scripts/make_ner_weak_dataset.py
+# опции: --max-per-category 4000, --val-share 0.1, --seed 20261017
+```
+
+Выход — `data/ner/{weak,train,val}.jsonl` (каталог `data/` генерируемый):
+JSONL-строка `{"text", "spans": [{"start", "end", "label",
+"attribute_code"}], "sku_id", "category_name"}`; split стратифицирован по
+категориям, детерминирован. Фокус — 8 категорий (Смартфоны, iPhone,
+Ноутбуки, Планшеты, Телевизоры, Мониторы, Наушники, Роботы-пылесосы).
+
+Текущее покрытие (≈10.2k записей): brand/model/storage/ram/processor/
+color/drive — массово; диагональ и ёмкость аккумулятора почти не размечаются,
+поскольку продавец задаёт их диапазонами («6.2 - 6.5"», «3000-5000 мАч»),
+которых в тексте карточки не бывает — такие значения слабой разметкой
+не покрываются по построению. Карточки с текстом длиннее 4000 символов
+после нормализации пропускаются.
+
 ## 7. Эндпоинты
 
 | Метод | Путь | Описание |
 | --- | --- | --- |
 | POST | `/api/v1/extract` | Извлечение атрибутов одной карточки |
-| POST | `/api/v1/extract/batch` | Пакетное извлечение (частичный успех, `threshold_override`) |
+| POST | `/api/v1/extract/batch` | Пакетное извлечение (частичный успех, `threshold_override`); батч сохраняется в истории, сбой записи → `persisted: false` |
+| GET | `/api/v1/batches` | История батчей (`limit` ≤ 100, `offset`, новые первыми; 503 ErrorResponse, если хранилище недоступно) |
+| GET | `/api/v1/batches/{batch_id}` | Сохранённый батч (порог, исходные карточки, полный ответ; 404/503) |
 | GET | `/api/v1/categories` | Список схем: generic + реестр (`category` регистронезависимо, `limit` ≤ 200, `offset`) |
 | GET | `/api/v1/categories/{category}` | Схема из реестра, иначе generic; 404 ErrorResponse, если не найдена |
 | GET | `/api/v1/health` | Проверка работоспособности (`degraded`, пока NER не загружен) |
@@ -389,7 +433,7 @@ generic-схему, карточки получают generic-fallback (поро
 
 ### Обработка ошибок
 
-Все ответы об ошибках (400/404/405/422/429/500) имеют контрактную форму
+Все ответы об ошибках (400/404/405/422/429/500/503) имеют контрактную форму
 `ErrorResponse` из `specflow_contracts`:
 
 ```json

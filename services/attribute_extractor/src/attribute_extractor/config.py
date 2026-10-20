@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     rate_limit_requests: int = Field(DEFAULT_RATE_LIMIT_REQUESTS, ge=0)
     rate_limit_window_seconds: float = Field(DEFAULT_RATE_LIMIT_WINDOW_SECONDS, gt=0)
 
+    # Серверная история батчей (PostgreSQL). Пусто — хранилище в памяти процесса
+    # (dev без БД; история не переживает перезапуск — см. batch_store.py).
+    database_url: str = ""
+
     # CORS
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 

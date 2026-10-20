@@ -110,18 +110,21 @@ def _load_cat_attr(path: str | Path) -> list[tuple[str, str, float]]:
 
 
 def _make_resolver(catalog_data: dict, blocklist: list[str], tmp_dir: Path) -> FieldResolver:
-    """FieldResolver по каталогу (seed + обогащение по param_stats) без персиста в data/.
+    """FieldResolver по каталогу (seed + обогащение по param_stats) без персиста.
 
-    Резолвер авто-добавляет неизвестные имена и персистит их в своё
-    хранилище; офлайн-сборке схем это состояние не нужно (в схему входят
-    только канонические коды), поэтому хранилище указывает во временный
-    каталог и удаляется после сборки.
+    Резолвер авто-добавляет неизвестные имена как новые поля в память;
+    в схему они всё равно не входят (``_param_codes`` отбрасывает их), а
+    ``persist_new_fields=False`` отключает перезапись JSON-хранилища при
+    каждом добавлении — на ~10k уникальных имён это часы перечитываний
+    вместо секунд. Хранилище указывает во временный каталог и удаляется
+    после сборки, ``data/field_catalog.json`` офлайн-сборка не затирает.
     """
     store = CatalogStore(tmp_dir / "field_catalog.json", tmp_dir / "field_blocklist.txt")
     return FieldResolver(
         catalog=FieldCatalog.from_dict(catalog_data),
         blocklist=FieldBlocklist(blocklist),
         store=store,
+        persist_new_fields=False,
     )
 
 

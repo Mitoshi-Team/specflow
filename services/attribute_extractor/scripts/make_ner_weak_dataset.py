@@ -52,6 +52,7 @@ FOCUS_CATEGORIES = (
 DEFAULT_SEED = 20261017
 DEFAULT_MAX_PER_CATEGORY = 4000
 DEFAULT_VAL_SHARE = 0.1
+TOP_UNCODED_PARAMS_LIMIT = 20
 # В YML бренд и модель лежат не в param, а в отдельных полях оффера;
 # для слабой разметки они подаются как псевдопараметры с именами,
 # которые резолвятся в канонические поля brand/model.
@@ -150,9 +151,9 @@ def select_cards(
 def build_resolver() -> FieldResolver:
     """Резолвер поверх боевого каталога, без персиста новых полей.
 
-    Слабая разметка не должна дополнять каталог полей: параметры вне
-    девяти канонических полей резолвятся в новые (отбрасываются в
-    ``weak_markup.resolve_attribute_code``) и остаются только в памяти.
+    Слабая разметка не должна дополнять боевой каталог: параметры вне девяти
+    канонических полей остаются только в памяти и дают некодированные спаны
+    (``attribute_code=None``) — канон назначает полю ручной аудит.
     """
     return FieldResolver(
         store=CatalogStore(DEFAULT_FIELD_CATALOG_PATH, DEFAULT_FIELD_BLOCKLIST_PATH),
@@ -168,10 +169,20 @@ def generate(
     val_share: float = DEFAULT_VAL_SHARE,
     seed: int = DEFAULT_SEED,
 ) -> dict[str, Any]:
-    """Собрать weak-датасет и split; вернуть статистику по полям."""
+    """Собрать weak-датасет и split; вернуть статистику по полям.
+
+    Помимо канонических полей размечаются неканонические параметры
+    (``include_uncoded=True``): их спаны несут ``attribute_code=None``.
+    ``top_uncoded_params`` показывает, какие имена дали некодированные
+    PROPERTY-спаны, — основа для пополнения блоклиста вторым проходом.
+    """
     resolver = build_resolver()
-    resolve_cache: dict[str, str | None] = {}
+    resolve_cache: dict[str, weak_markup.ParamResolution] = {}
     counts: Counter[str] = Counter()
+    uncoded_names: Counter[str] = Counter()
+    property_spans_total = 0
+    property_spans_uncoded = 0
+    records_with_uncoded = 0
     per_category: Counter[str] = Counter()
     records: list[weak_markup.WeakRecord] = []
     offers = load_offers(dataset_dir)
@@ -187,14 +198,25 @@ def generate(
             sku_id=row.sku_id,
             category_name=row.category_name,
             resolve_cache=resolve_cache,
+            include_uncoded=True,
         )
         if record is None:
             continue
         records.append(record)
         per_category[row.category_name] += 1
+        has_uncoded = False
         for span in record.spans:
-            if span.label == NER_LABEL_PROPERTY:
+            if span.label != NER_LABEL_PROPERTY:
+                continue
+            property_spans_total += 1
+            if span.attribute_code is None:
+                property_spans_uncoded += 1
+                has_uncoded = True
+                uncoded_names[span.parameter_name or ""] += 1
+            else:
                 counts[span.attribute_code] += 1
+        if has_uncoded:
+            records_with_uncoded += 1
     train, val = weak_markup.stratified_split(records, val_share=val_share, seed=seed)
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, split in (("weak", records), ("train", train), ("val", val)):
@@ -205,7 +227,11 @@ def generate(
         "records": len(records),
         "train": len(train),
         "val": len(val),
+        "property_spans_total": property_spans_total,
+        "property_spans_uncoded": property_spans_uncoded,
+        "records_with_uncoded": records_with_uncoded,
         "property_spans_by_code": dict(sorted(counts.items())),
+        "top_uncoded_params": dict(uncoded_names.most_common(TOP_UNCODED_PARAMS_LIMIT)),
         "per_category": dict(sorted(per_category.items())),
     }
 

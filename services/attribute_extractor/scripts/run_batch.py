@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import sys
 import time
 from pathlib import Path
@@ -36,6 +37,8 @@ from attribute_extractor.constants import (  # noqa: E402
     RUN_BATCH_MAX_BATCH_SIZE,
     RUN_BATCH_MAX_INPUT_SIZE_MB,
 )
+
+logger = logging.getLogger(__name__)
 
 _JSON_SUFFIXES = frozenset({".json", ".jsonl"})
 _TABLE_SUFFIXES = frozenset({".csv", ".tsv"})
@@ -196,8 +199,13 @@ def run_offline(
                 continue
             try:
                 predictions.append((card, pipeline.extract(card)))
-            except Exception:
-                # Ошибка пайплайна не прерывает прогон остальных карточек.
+            except Exception:  # noqa: BLE001 — карточка с битым пайплайном не прерывает прогон
+                # Ошибка пайплайна не прерывает прогон остальных карточек
+                # (частичный успех), но причина фиксируется в логе с traceback.
+                logger.exception(
+                    "Извлечение не удалось (product_id=%s); карточка помечена error",
+                    card.product_id,
+                )
                 predictions.append((card, _error_result(card, settings.pipeline_version)))
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -256,6 +264,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Логи пайплайна (деградации, сбои карточек) должны быть видны в CLI;
+    # basicConfig — no-op, если логирование уже настроено вызывающим кодом.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     args = parse_args(argv)
     error = validate_input(args.input)
     if error is not None:

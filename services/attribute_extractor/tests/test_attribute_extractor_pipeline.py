@@ -106,6 +106,45 @@ def test_unavailable_ner_gracefully_degrades_to_rules() -> None:
     assert by_code["brand"].extraction_method == ExtractionMethod.RULE
 
 
+class _FailingStubNER(BaseExtractor):
+    """FAKE NER: доступен, но падает при извлечении (сбой модели/трансформера)."""
+
+    name = NER_EXTRACTOR_NAME
+    priority = 10
+
+    def is_available(self) -> bool:
+        return True
+
+    def extract(self, card: ProductCard, schema) -> list[AttributeCandidate]:
+        raise RuntimeError("NER backend недоступен")
+
+
+def test_failing_ner_degrades_to_rules_and_logs_warning(caplog) -> None:
+    """Сбой NER не роняет пайплайн, но фиксируется в логе (регрессия к
+    хакатон-ревью: раньше ``except Exception: return []`` был молчаливым)."""
+    import logging
+
+    from attribute_extractor.constants import DEFAULT_BRAND_VOCAB_PATH
+    from attribute_extractor.extractors import ExtractorRegistry
+    from attribute_extractor.extractors.rule import RuleExtractor
+    from attribute_extractor.references import load_brand_vocab
+
+    # Реестр как в build_default_registry, но NER падает при извлечении.
+    registry = ExtractorRegistry(
+        [
+            RuleExtractor(brand_vocab=load_brand_vocab(DEFAULT_BRAND_VOCAB_PATH)),
+            _FailingStubNER(),
+        ]
+    )
+    pipeline = ExtractPipeline(settings=Settings(), registry=registry)
+    with caplog.at_level(logging.WARNING, logger="attribute_extractor.pipeline"):
+        result = pipeline.extract(_card_from_gold(RECORD_1))
+
+    by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
+    assert by_code["brand"].extraction_method == ExtractionMethod.RULE
+    assert any("NER" in record.getMessage() for record in caplog.records)
+
+
 def _required_schema_registry(category: str = "Смартфоны") -> SchemaRegistry:
     from attribute_extractor.preprocessing import generic_schema
 

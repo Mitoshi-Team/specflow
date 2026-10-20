@@ -104,6 +104,11 @@ def _canonicalize(text: str) -> str:
     return _WHITESPACE_RE.sub(" ", canonical).strip()
 
 
+def canonicalize_text(text: str) -> str:
+    """Каноническая форма текста для сопоставления значений (см. ``_canonicalize``)."""
+    return _canonicalize(text)
+
+
 class GroundingValidator:
     """Проверяет, что кандидаты подтверждены текстом карточки (Этап 9)."""
 

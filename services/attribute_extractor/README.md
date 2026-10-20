@@ -320,6 +320,9 @@ seller-атрибутах и недостижимые из текста, иск�
   `structured`/`rule` → `DETERMINISTIC_CONFIDENCE`, `ner` → `ner_score`
   (`ConfidenceCalculator`).
 - `src/attribute_extractor/grounding.py` — подтверждение в тексте (Этап 9).
+- `src/attribute_extractor/weak_markup.py` — слабая разметка NER от
+  seller-атрибутов (distant supervision): поиск спанов значений/имён
+  параметров в тексте, резолв в канонические поля, стратифицированный split.
 - `src/attribute_extractor/normalization.py` — нормализация значений (Этап 6):
   регистр, синонимы, единицы, форматирование, enum-валидация.
 - `src/attribute_extractor/references.py` — справочники (`AttributeVocab`,
@@ -364,6 +367,34 @@ python services/attribute_extractor/scripts/evaluate.py \
   --gold services/attribute_extractor/gold/gold.jsonl \
   --predictions /tmp/preds/predictions.jsonl --out /tmp/metrics.json
 ```
+
+### Weak-датасет для NER (distant supervision)
+
+`scripts/make_ner_weak_dataset.py` строит обучающую выборку для NER (Этап 4)
+из структурных полей каталога: seller-параметры YML-офферов плюс `vendor`/
+`model` как псевдопараметры «Бренд»/«Модель». Для каждого параметра, чьё имя
+резолвится `FieldResolver` в каноническое поле (без авто-добавления новых),
+в тексте карточки ищутся вхождения значения (`PROPERTY`) и имени параметра
+(`CHARACTERISTIC`) — спаны слабой разметки. Текст записи — тот же вид, что
+увидит NER в проде: `normalize_text` от `raw_text` с метками секций.
+
+```bash
+python services/attribute_extractor/scripts/make_ner_weak_dataset.py
+# опции: --max-per-category 4000, --val-share 0.1, --seed 20261017
+```
+
+Выход — `data/ner/{weak,train,val}.jsonl` (каталог `data/` генерируемый):
+JSONL-строка `{"text", "spans": [{"start", "end", "label",
+"attribute_code"}], "sku_id", "category_name"}`; split стратифицирован по
+категориям, детерминирован. Фокус — 8 категорий (Смартфоны, iPhone,
+Ноутбуки, Планшеты, Телевизоры, Мониторы, Наушники, Роботы-пылесосы).
+
+Текущее покрытие (≈10.2k записей): brand/model/storage/ram/processor/
+color/drive — массово; диагональ и ёмкость аккумулятора почти не размечаются,
+поскольку продавец задаёт их диапазонами («6.2 - 6.5"», «3000-5000 мАч»),
+которых в тексте карточки не бывает — такие значения слабой разметкой
+не покрываются по построению. Карточки с текстом длиннее 4000 символов
+после нормализации пропускаются.
 
 ## 7. Эндпоинты
 

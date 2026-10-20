@@ -4,11 +4,9 @@ import { useTranslation } from "react-i18next";
 
 import { PREVIEW_MAX_ROWS } from "../constants";
 import {
-  REQUIRED_INPUT_FIELDS,
+  hasMissingDescription,
   isFieldPresent,
-  validateInput,
-  type InputValidationResult,
-  type RequiredInputField,
+  type PreviewField,
 } from "../lib/inputValidation";
 import type { ProductCardRequest } from "../schemas/api";
 import EmptyState from "./EmptyState";
@@ -29,68 +27,43 @@ const EMPTY_VALUE = "—";
  */
 function fieldCellValue(
   card: ProductCardRequest,
-  field: RequiredInputField,
+  field: PreviewField,
 ): string | undefined {
   if (!isFieldPresent(card, field)) {
     return undefined;
-  }
-  if (field === "seller_attributes") {
-    return JSON.stringify(card.seller_attributes);
   }
   return card[field] ?? "";
 }
 
 function hasLongValue(card: ProductCardRequest): boolean {
   const values = [
-    card.product_id,
-    ...REQUIRED_INPUT_FIELDS.map((field) => fieldCellValue(card, field)),
+    card.product_id ?? "",
+    card.title ?? "",
+    card.description ?? "",
   ];
-  return values.some(
-    (value) => typeof value === "string" && value.length > EXPAND_MIN_CHARS,
-  );
-}
-
-/**
- * Ключ текста сводки валидации (i18n): перечень недостающих полей,
- * подтверждение их наличия либо ошибка, когда нет ни одного обязательного
- * поля (frontend.md, 6.3).
- */
-function summaryKey(validation: InputValidationResult): string {
-  if (!validation.valid) {
-    return "preview.validation.noContent";
-  }
-  if (validation.missingFields.length > 0) {
-    return "preview.validation.missingFields";
-  }
-  return "preview.validation.allPresent";
+  return values.some((value) => value.length > EXPAND_MIN_CHARS);
 }
 
 export type DataPreviewProps = {
   /** Полный список разобранных карточек; показываются первые `maxRows`. */
   cards: ProductCardRequest[];
-  /**
-   * Результат валидации обязательных полей. По умолчанию считается из
-   * `cards` через `validateInput`, поэтому вызывающему коду достаточно
-   * передать карточки; проп нужен, когда результат уже посчитан снаружи
-   * (например, в тестах).
-   */
-  validation?: InputValidationResult;
   /** Сколько первых строк показывать (по умолчанию `PREVIEW_MAX_ROWS`). */
   maxRows?: number;
 };
 
 /**
  * Предпросмотр первых строк загруженного файла (design.md, раздел 7;
- * frontend.md, разделы 5.1, 6.2 `DataPreview`, 6.3).
+ * frontend.md, разделы 5.1, 6.2 `DataPreview`).
  *
  * Длинные значения обрезаются по высоте; строку можно раскрыть явным
  * действием. Пустые поля показываются отдельной меткой, а не выглядят
- * как заполненные. Над таблицей — сводка валидации обязательных полей
- * title/description/seller_attributes.
+ * как заполненные. Над таблицей — предупреждение, если хотя бы в одной
+ * карточке нет описания: пайплайн использует только `title` и
+ * `description` (api_contract.md, 3.1), поэтому других проверок состава
+ * полей предпросмотр не делает.
  */
 export default function DataPreview({
   cards,
-  validation,
   maxRows = PREVIEW_MAX_ROWS,
 }: DataPreviewProps) {
   const { t } = useTranslation();
@@ -98,11 +71,6 @@ export default function DataPreview({
   const [expandedRows, setExpandedRows] = useState<ReadonlySet<number>>(
     () => new Set(),
   );
-
-  const inputValidation = validation ?? validateInput(cards);
-  const missingLabels = inputValidation.missingFields
-    .map((field) => t(`preview.columns.${field}`))
-    .join(", ");
 
   const shown = Math.min(cards.length, maxRows);
   const visibleCards = cards.slice(0, shown);
@@ -153,37 +121,11 @@ export default function DataPreview({
 
   return (
     <div className="preview">
-      <p
-        className={`preview__validation${
-          inputValidation.valid ? "" : " preview__validation--error"
-        }`}
-        role={inputValidation.valid ? "status" : "alert"}
-      >
-        {t(summaryKey(inputValidation), { fields: missingLabels })}
-      </p>
-
-      <ul className="preview__fields">
-        {REQUIRED_INPUT_FIELDS.map((field) => {
-          const present = inputValidation.presentFields.includes(field);
-          return (
-            <li
-              key={field}
-              className={`preview__field preview__field--${
-                present ? "present" : "missing"
-              }`}
-            >
-              <span className="preview__field-name">
-                {t(`preview.columns.${field}`)}
-              </span>
-              <span className="preview__field-state">
-                {present
-                  ? t("preview.validation.present")
-                  : t("preview.validation.missing")}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+      {hasMissingDescription(cards) ? (
+        <p className="preview__validation" role="status">
+          {t("preview.validation.missingDescription")}
+        </p>
+      ) : null}
 
       <div className="preview__scroll">
         <table className="preview__table" aria-label={t("preview.title")}>
@@ -198,9 +140,6 @@ export default function DataPreview({
               </th>
               <th scope="col" className="preview__cell--wide">
                 {t("preview.columns.description")}
-              </th>
-              <th scope="col" className="preview__cell--wide">
-                {t("preview.columns.seller_attributes")}
               </th>
               <th scope="col" className="preview__action">
                 <span className="sr-only">{t("preview.columns.action")}</span>
@@ -226,11 +165,6 @@ export default function DataPreview({
                     fieldCellValue(card, "description"),
                     index,
                     "preview__cell--wide",
-                  )}
-                  {cell(
-                    fieldCellValue(card, "seller_attributes"),
-                    index,
-                    "preview__cell--wide preview__mono",
                   )}
                   <td className="preview__action">
                     {hasLongValue(card) ? (

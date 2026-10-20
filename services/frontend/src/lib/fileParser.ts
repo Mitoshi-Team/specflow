@@ -2,7 +2,7 @@
  * Разбор загружаемых файлов карточек (CSV/JSON/TSV).
  *
  * Чистый модуль без React: детекция формата, парсинг, нормализация и
- * валидация минимального набора полей (frontend.md, 6.3). UI не участвует
+ * валидация входных полей (frontend.md, 6.3). UI не участвует
  * в разборе — компонент `FileUpload` лишь отображает результат, а хук
  * `useFileParser` управляет асинхронным состоянием.
  */
@@ -15,7 +15,6 @@ import {
   TSV_DELIMITER,
 } from "../constants";
 import type { ProductCardRequest, SellerAttributes } from "../schemas/api";
-import { hasRequiredContent } from "./inputValidation";
 
 /** Поддерживаемые форматы входных файлов. */
 export type FileFormat = "csv" | "json" | "tsv";
@@ -140,15 +139,12 @@ function csvRowToCard(row: Record<string, string>): CardResult {
     card.language = language;
   }
 
-  if (!hasRequiredContent(card)) {
-    return { ok: false, error: { code: "noContent" } };
-  }
   return { ok: true, card };
 }
 
 function parseDelimited(content: string, format: "csv" | "tsv"): FileParseResult {
   const delimiter = format === "tsv" ? TSV_DELIMITER : CSV_DELIMITER;
-  const { data } = Papa.parse<Record<string, string>>(content, {
+  const { data, meta } = Papa.parse<Record<string, string>>(content, {
     header: true,
     delimiter,
     skipEmptyLines: true,
@@ -156,6 +152,13 @@ function parseDelimited(content: string, format: "csv" | "tsv"): FileParseResult
 
   if (data.length === 0) {
     return { ok: false, error: { code: "noCards" } };
+  }
+
+  // Файл без колонки описания бесполезен для анализатора: ошибку сообщаем
+  // один раз на уровне файла, а не построчно.
+  const fields = meta.fields ?? [];
+  if (!fields.includes("description")) {
+    return { ok: false, error: { code: "noContent" } };
   }
 
   const cards: ProductCardRequest[] = [];
@@ -199,9 +202,6 @@ function jsonItemToCard(item: Record<string, unknown>): CardResult {
     card.seller_attributes = sellerAttributes;
   }
 
-  if (!hasRequiredContent(card)) {
-    return { ok: false, error: { code: "noContent" } };
-  }
   return { ok: true, card };
 }
 
@@ -220,12 +220,28 @@ function parseJson(content: string): FileParseResult {
     return { ok: false, error: { code: "noCards" } };
   }
 
-  const cards: ProductCardRequest[] = [];
+  // Структурные ошибки имеют приоритет над отсутствием поля: элемент-не-объект
+  // должен сообщаться как invalidStructure, а не как отсутствие description.
   for (let index = 0; index < parsed.length; index += 1) {
-    const item = parsed[index];
-    if (!isRecord(item)) {
+    if (!isRecord(parsed[index])) {
       return { ok: false, error: { code: "invalidStructure", row: index + 1 } };
     }
+  }
+
+  // Как и для CSV: файл без поля описания отклоняем целиком, одной ошибкой.
+  const hasDescriptionField = parsed.some(
+    (item) =>
+      isRecord(item) &&
+      item.description !== undefined &&
+      item.description !== null,
+  );
+  if (!hasDescriptionField) {
+    return { ok: false, error: { code: "noContent" } };
+  }
+
+  const cards: ProductCardRequest[] = [];
+  for (let index = 0; index < parsed.length; index += 1) {
+    const item = parsed[index] as Record<string, unknown>;
     const itemResult = jsonItemToCard(item);
     if (!itemResult.ok) {
       return { ok: false, error: { ...itemResult.error, row: index + 1 } };

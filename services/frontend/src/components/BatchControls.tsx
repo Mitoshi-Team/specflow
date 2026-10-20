@@ -5,11 +5,8 @@ import { useTranslation } from "react-i18next";
 import type { ApiError } from "../api";
 import {
   CONFIDENCE_THRESHOLD_STEP,
-  DEFAULT_BATCH_SIZE,
   DEFAULT_CONFIDENCE_THRESHOLD,
-  MAX_BATCH_SIZE,
   MAX_CONFIDENCE_THRESHOLD,
-  MIN_BATCH_SIZE,
   MIN_CONFIDENCE_THRESHOLD,
 } from "../constants";
 import type {
@@ -33,7 +30,12 @@ export type BatchControlsProps = {
     items: ProductCardRequest[],
     settings: BatchSettings,
   ) => Promise<void>;
-  onReset: () => void;
+  /**
+   * Сброс внешних данных страницы: загруженного файла либо текста одиночной
+   * карточки. Сам порог уверенности компонент сбрасывает сам, поэтому
+   * снаружи он не передаётся.
+   */
+  onResetAll: () => void;
 };
 
 /**
@@ -47,11 +49,16 @@ function isBlank(value: string): boolean {
 }
 
 /**
- * Настройки батча, кнопки «Обработать»/«Сброс», прогресс «Обработано X из Y»
- * и ошибки API (frontend.md, раздел 6.2; design.md, раздел 7).
+ * Настройки порога уверенности, кнопки «Обработать»/«Сброс», прогресс
+ * «Обработано X из Y» и ошибки API (frontend.md, раздел 6.2; design.md,
+ * раздел 7).
  *
- * Компонент владеет только введением настроек; запуск, прогресс и ошибки
- * приходят снаружи через `useBatchExtract` (логика отделена от UI).
+ * Размер батча не настраивается: он определяется числом загруженных
+ * карточек (см. `useBatchExtract`). «Сброс» возвращает панель к исходному
+ * состоянию: порог — к значению по умолчанию, а загруженный файл или текст
+ * одиночной карточки очищает страница через `onResetAll` (компонент не
+ * владеет этими данными). Запуск, прогресс и ошибки приходят снаружи через
+ * `useBatchExtract` (логика отделена от UI).
  */
 export default function BatchControls({
   cards,
@@ -60,26 +67,16 @@ export default function BatchControls({
   error,
   response,
   onStart,
-  onReset,
+  onResetAll,
 }: BatchControlsProps) {
   const { t } = useTranslation();
-  const sizeId = useId();
   const thresholdId = useId();
-  const sizeHintId = `${sizeId}-hint`;
   const thresholdHintId = `${thresholdId}-hint`;
+  const defaultThresholdValue = String(DEFAULT_CONFIDENCE_THRESHOLD);
 
-  const [batchSizeValue, setBatchSizeValue] = useState(String(DEFAULT_BATCH_SIZE));
-  const [thresholdValue, setThresholdValue] = useState(
-    String(DEFAULT_CONFIDENCE_THRESHOLD),
-  );
+  const [thresholdValue, setThresholdValue] = useState(defaultThresholdValue);
 
-  const batchSize = Number(batchSizeValue);
   const threshold = Number(thresholdValue);
-  const batchSizeValid =
-    !isBlank(batchSizeValue) &&
-    Number.isInteger(batchSize) &&
-    batchSize >= MIN_BATCH_SIZE &&
-    batchSize <= MAX_BATCH_SIZE;
   const thresholdValid =
     !isBlank(thresholdValue) &&
     Number.isFinite(threshold) &&
@@ -89,25 +86,23 @@ export default function BatchControls({
   const hasCards = cards.length > 0;
   const isRunning = status === "running";
   const showProgress = status !== "idle";
-  const canStart = hasCards && batchSizeValid && thresholdValid && !isRunning;
+  const canStart = hasCards && thresholdValid && !isRunning;
   const partialErrors = status === "success" ? (response?.errors ?? 0) : 0;
 
   const handleStart = (): void => {
     if (!canStart) {
       return;
     }
-    void onStart(cards, {
-      batchSize,
-      thresholdOverride: threshold,
-    });
-  };
-
-  const handleSizeChange = (event: ChangeEvent<HTMLInputElement>): void => {
-    setBatchSizeValue(event.target.value);
+    void onStart(cards, { thresholdOverride: threshold });
   };
 
   const handleThresholdChange = (event: ChangeEvent<HTMLInputElement>): void => {
     setThresholdValue(event.target.value);
+  };
+
+  const handleReset = (): void => {
+    setThresholdValue(defaultThresholdValue);
+    onResetAll();
   };
 
   const barWidth =
@@ -120,42 +115,6 @@ export default function BatchControls({
   return (
     <div className="batch">
       <div className="batch__settings">
-        <div className="batch__field">
-          <label className="batch__label" htmlFor={sizeId}>
-            {t("batch.batchSize.label")}
-          </label>
-          <input
-            id={sizeId}
-            className="batch__input"
-            type="number"
-            inputMode="numeric"
-            min={MIN_BATCH_SIZE}
-            max={MAX_BATCH_SIZE}
-            step={1}
-            value={batchSizeValue}
-            disabled={isRunning}
-            aria-invalid={!batchSizeValid}
-            aria-describedby={sizeHintId}
-            onChange={handleSizeChange}
-          />
-          <p
-            className={`batch__hint${
-              batchSizeValid ? "" : " batch__hint--error"
-            }`}
-            id={sizeHintId}
-          >
-            {batchSizeValid
-              ? t("batch.rangeHint", {
-                  min: MIN_BATCH_SIZE,
-                  max: MAX_BATCH_SIZE,
-                })
-              : t("batch.rangeError", {
-                  min: MIN_BATCH_SIZE,
-                  max: MAX_BATCH_SIZE,
-                })}
-          </p>
-        </div>
-
         <div className="batch__field">
           <label className="batch__label" htmlFor={thresholdId}>
             {t("batch.threshold.label")}
@@ -205,8 +164,8 @@ export default function BatchControls({
         <button
           type="button"
           className="btn btn--secondary"
-          disabled={isRunning || status === "idle"}
-          onClick={onReset}
+          disabled={isRunning || (!hasCards && thresholdValue === defaultThresholdValue)}
+          onClick={handleReset}
         >
           {t("batch.reset")}
         </button>

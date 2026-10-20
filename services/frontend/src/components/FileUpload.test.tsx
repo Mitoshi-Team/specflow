@@ -31,11 +31,38 @@ describe("FileUpload", () => {
     );
   });
 
-  it("не поддерживает перетаскивание: drop не выбирает файл", () => {
+  it("выбирает файл при перетаскивании в область", () => {
     const { onFileSelect, dropzone } = renderUpload();
     const file = fakeFile("cards.csv");
 
     fireEvent.drop(dropzone, { dataTransfer: { files: [file] } });
+
+    expect(onFileSelect).toHaveBeenCalledWith(file);
+  });
+
+  it("подсвечивает область при перетаскивании и снимает подсветку", () => {
+    const { dropzone } = renderUpload();
+
+    fireEvent.dragOver(dropzone);
+    expect(dropzone.className).toContain("file-upload__zone--dragover");
+
+    fireEvent.dragLeave(dropzone);
+    expect(dropzone.className).not.toContain("file-upload__zone--dragover");
+  });
+
+  it("игнорирует перетаскивание, когда взаимодействие заблокировано", () => {
+    const { onFileSelect, dropzone } = renderUpload({ disabled: true });
+    const file = fakeFile("cards.csv");
+
+    fireEvent.drop(dropzone, { dataTransfer: { files: [file] } });
+
+    expect(onFileSelect).not.toHaveBeenCalled();
+  });
+
+  it("игнорирует drop без файлов", () => {
+    const { onFileSelect, dropzone } = renderUpload();
+
+    fireEvent.drop(dropzone, { dataTransfer: { files: [] } });
 
     expect(onFileSelect).not.toHaveBeenCalled();
   });
@@ -83,12 +110,9 @@ describe("FileUpload", () => {
     renderUpload({ status: "error", error: { code: "noContent", row: 3 } });
 
     const status = screen.getByRole("status").textContent ?? "";
-    expect(status).toContain(
-      "Строка не содержит title, description или seller_attributes",
-    );
+    expect(status).toContain("Файл не содержит столбца description");
     expect(status).toContain("Строка 3");
   });
-
   it("в состоянии ошибки подсказывает, что исправить", () => {
     renderUpload({ status: "error", error: { code: "unsupportedFormat" } });
 

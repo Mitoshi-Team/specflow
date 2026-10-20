@@ -78,29 +78,44 @@ describe("parseFileContent: CSV", () => {
   });
 
   it("игнорирует неизвестные колонки", () => {
-    const result = parseFileContent("title,unknown\nТелефон,значение", "csv");
+    const result = parseFileContent(
+      "description,unknown\nОписание,значение",
+      "csv",
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      format: "csv",
+      cards: [{ description: "Описание" }],
+    });
+  });
+
+  it("сообщает о некорректном JSON в seller_attributes с номером строки", () => {
+    expectFailure(
+      parseFileContent(
+        "description,seller_attributes\nОписание,not-json",
+        "csv",
+      ),
+      "invalidSellerAttributes",
+      2,
+    );
+  });
+
+  it("сообщает об отсутствии колонки description", () => {
+    expectFailure(
+      parseFileContent("title,seller_attributes\nТелефон,{}", "csv"),
+      "noContent",
+    );
+  });
+
+  it("принимает файл, где description пуст в отдельных строках", () => {
+    const result = parseFileContent("title,description\nТелефон,", "csv");
 
     expect(result).toEqual({
       ok: true,
       format: "csv",
       cards: [{ title: "Телефон" }],
     });
-  });
-
-  it("сообщает о некорректном JSON в seller_attributes с номером строки", () => {
-    expectFailure(
-      parseFileContent("title,seller_attributes\nТелефон,not-json", "csv"),
-      "invalidSellerAttributes",
-      2,
-    );
-  });
-
-  it("сообщает о строке без контента", () => {
-    expectFailure(
-      parseFileContent("title,seller_attributes\n,", "csv"),
-      "noContent",
-      2,
-    );
   });
 
   it("сообщает об отсутствии карточек, если есть только заголовок", () => {
@@ -110,12 +125,15 @@ describe("parseFileContent: CSV", () => {
 
 describe("parseFileContent: TSV", () => {
   it("использует табуляцию как разделитель", () => {
-    const result = parseFileContent("product_id\ttitle\np-2\tНоутбук", "tsv");
+    const result = parseFileContent(
+      "product_id\tdescription\np-2\tНоутбук",
+      "tsv",
+    );
 
     expect(result).toEqual({
       ok: true,
       format: "tsv",
-      cards: [{ product_id: "p-2", title: "Ноутбук" }],
+      cards: [{ product_id: "p-2", description: "Ноутбук" }],
     });
   });
 });
@@ -123,14 +141,24 @@ describe("parseFileContent: TSV", () => {
 describe("parseFileContent: JSON", () => {
   it("разбирает массив карточек", () => {
     const content = JSON.stringify([
-      { product_id: "p-1", title: "Телефон", seller_attributes: { color: "чёрный" } },
+      {
+        product_id: "p-1",
+        title: "Телефон",
+        description: "Описание",
+        seller_attributes: { color: "чёрный" },
+      },
     ]);
 
     expect(parseFileContent(content, "json")).toEqual({
       ok: true,
       format: "json",
       cards: [
-        { product_id: "p-1", title: "Телефон", seller_attributes: { color: "чёрный" } },
+        {
+          product_id: "p-1",
+          title: "Телефон",
+          description: "Описание",
+          seller_attributes: { color: "чёрный" },
+        },
       ],
     });
   });
@@ -151,21 +179,35 @@ describe("parseFileContent: JSON", () => {
     expectFailure(parseFileContent("[1]", "json"), "invalidStructure", 1);
   });
 
-  it("сообщает об элементе без контента", () => {
+  it("сообщает об отсутствии поля description у элементов", () => {
     expectFailure(
       parseFileContent('[{"product_id":"p-1"}]', "json"),
       "noContent",
+    );
+  });
+
+  it("принимает элемент без title, если есть description", () => {
+    expect(parseFileContent('[{"product_id":"p-1","description":"Текст"}]', "json")).toEqual({
+      ok: true,
+      format: "json",
+      cards: [{ product_id: "p-1", description: "Текст" }],
+    });
+  });
+
+  it("отклоняет нестроковые значения строковых полей", () => {
+    expectFailure(
+      parseFileContent('[{"description":"x","title":123}]', "json"),
+      "invalidStructure",
       1,
     );
   });
 
-  it("отклоняет нестроковые значения строковых полей", () => {
-    expectFailure(parseFileContent('[{"title":123}]', "json"), "invalidStructure", 1);
-  });
-
   it("отклоняет seller_attributes, не являющиеся объектом", () => {
     expectFailure(
-      parseFileContent('[{"title":"x","seller_attributes":"y"}]', "json"),
+      parseFileContent(
+        '[{"description":"x","seller_attributes":"y"}]',
+        "json",
+      ),
       "invalidStructure",
       1,
     );
@@ -182,7 +224,7 @@ describe("parseFile", () => {
   }
 
   it("отклоняет файл с неподдерживаемым расширением", async () => {
-    const result = await parseFile(fakeFile("cards.txt", "title\nТелефон"));
+    const result = await parseFile(fakeFile("cards.txt", "description\nОписание"));
     expectFailure(result, "unsupportedFormat");
   });
 
@@ -199,11 +241,11 @@ describe("parseFile", () => {
   });
 
   it("возвращает результат успешного разбора", async () => {
-    const result = await parseFile(fakeFile("cards.csv", "title\nТелефон"));
+    const result = await parseFile(fakeFile("cards.csv", "description\nОписание"));
     expect(result).toEqual({
       ok: true,
       format: "csv",
-      cards: [{ title: "Телефон" }],
+      cards: [{ description: "Описание" }],
     });
   });
 

@@ -16,7 +16,7 @@ const IDLE_PROGRESS: BatchProgress = { processed: 0, total: 0 };
 
 function renderControls(props: Partial<BatchControlsProps> = {}) {
   const onStart = vi.fn().mockResolvedValue(undefined);
-  const onReset = vi.fn();
+  const onResetAll = vi.fn();
   render(
     <BatchControls
       cards={CARDS}
@@ -25,11 +25,11 @@ function renderControls(props: Partial<BatchControlsProps> = {}) {
       error={null}
       response={null}
       onStart={onStart}
-      onReset={onReset}
+      onResetAll={onResetAll}
       {...props}
     />,
   );
-  return { onStart, onReset };
+  return { onStart, onResetAll };
 }
 
 function button(name: string): HTMLButtonElement {
@@ -55,8 +55,9 @@ describe("BatchControls", () => {
   it("показывает настройки по умолчанию без статусной строки", () => {
     renderControls();
 
-    expect(input("Размер батча").value).toBe("1");
     expect(input("Порог уверенности").value).toBe("0.8");
+    // Размер батча больше не настраивается: он определяется числом карточек.
+    expect(screen.queryByLabelText("Размер батча")).toBeNull();
     // Текстовый статус со страницы убран: во время обработки состояние
     // показывает оверлей загрузки на уровне страницы (PageHome).
     expect(screen.queryByRole("status")).toBeNull();
@@ -66,13 +67,9 @@ describe("BatchControls", () => {
   it("запускает батч с текущими настройками", () => {
     const { onStart } = renderControls();
 
-    fireEvent.change(input("Размер батча"), { target: { value: "20" } });
     fireEvent.click(button("Обработать"));
 
-    expect(onStart).toHaveBeenCalledWith(CARDS, {
-      batchSize: 20,
-      thresholdOverride: 0.8,
-    });
+    expect(onStart).toHaveBeenCalledWith(CARDS, { thresholdOverride: 0.8 });
   });
 
   it("блокирует запуск, когда нет валидных карточек", () => {
@@ -81,29 +78,6 @@ describe("BatchControls", () => {
     expect(button("Обработать").disabled).toBe(true);
     expect(screen.getByText("Нет валидных карточек для обработки")).toBeDefined();
     expect(onStart).not.toHaveBeenCalled();
-  });
-
-  it("блокирует запуск и показывает ошибку диапазона при неверной настройке", () => {
-    renderControls();
-
-    fireEvent.change(input("Размер батча"), { target: { value: "99" } });
-
-    expect(button("Обработать").disabled).toBe(true);
-    expect(input("Размер батча").getAttribute("aria-invalid")).toBe("true");
-    expect(
-      screen.getByText("Значение вне диапазона от 1 до 50"),
-    ).toBeDefined();
-  });
-
-  it("считает очищенный размер батча невалидным", () => {
-    renderControls();
-
-    fireEvent.change(input("Размер батча"), { target: { value: "" } });
-
-    expect(input("Размер батча").getAttribute("aria-invalid")).toBe("true");
-    expect(
-      screen.getByText("Значение вне диапазона от 1 до 50"),
-    ).toBeDefined();
   });
 
   it("блокирует запуск и показывает ошибку при пороге вне диапазона", () => {
@@ -144,7 +118,7 @@ describe("BatchControls", () => {
     expect(screen.getByText("Обработано 0 из 5")).toBeDefined();
     expect(button("Обработать").disabled).toBe(true);
     expect(button("Сброс").disabled).toBe(true);
-    expect(input("Размер батча").disabled).toBe(true);
+    expect(input("Порог уверенности").disabled).toBe(true);
 
     const bar = screen.getByRole("progressbar");
     expect(bar.getAttribute("aria-valuenow")).toBeNull();
@@ -195,21 +169,34 @@ describe("BatchControls", () => {
     expect(screen.getByText("Обработано 0 из 3")).toBeDefined();
   });
 
-  it("сбрасывает состояние по кнопке «Сброс»", () => {
-    const { onReset } = renderControls({
-      status: "success",
-      progress: { processed: 3, total: 3 },
-      response: successResponse(),
-    });
+  it("сбрасывает порог и внешние данные по кнопке «Сброс»", () => {
+    const { onResetAll } = renderControls();
 
+    // Порог изменён, значит «Сброс» активен (есть что возвращать).
+    fireEvent.change(input("Порог уверенности"), { target: { value: "0.4" } });
     fireEvent.click(button("Сброс"));
 
-    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(input("Порог уверенности").value).toBe("0.8");
+    expect(onResetAll).toHaveBeenCalledTimes(1);
   });
 
-  it("блокирует «Сброс» в состоянии ожидания", () => {
+  it("сбрасывает порог, когда загружены карточки", () => {
     renderControls();
 
+    // Карточки есть, а порог по умолчанию: кнопка всё равно нужна, чтобы
+    // очистить файл/текст страницы.
+    expect(button("Сброс").disabled).toBe(false);
+
+    fireEvent.change(input("Порог уверенности"), { target: { value: "0.4" } });
+    fireEvent.click(button("Сброс"));
+
+    expect(input("Порог уверенности").value).toBe("0.8");
+  });
+
+  it("блокирует «Сброс», когда нечего сбрасывать", () => {
+    renderControls({ cards: [] });
+
+    // Нет ни карточек, ни изменённого порога — сбрасывать нечего.
     expect(button("Сброс").disabled).toBe(true);
   });
 });

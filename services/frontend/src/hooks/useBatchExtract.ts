@@ -4,7 +4,6 @@ import { ApiError, extractBatch } from "../api";
 import {
   MAX_BATCH_SIZE,
   MAX_CONFIDENCE_THRESHOLD,
-  MIN_BATCH_SIZE,
   MIN_CONFIDENCE_THRESHOLD,
 } from "../constants";
 import type {
@@ -18,8 +17,6 @@ export type BatchStatus = "idle" | "running" | "success" | "error";
 
 /** Настройки запуска батча. */
 export type BatchSettings = {
-  /** Размер батча — поле `batch_size` запроса (api_contract.md, раздел 3.4). */
-  batchSize: number;
   /** Переопределение порога уверенности — поле `threshold_override`. */
   thresholdOverride: number;
 };
@@ -84,17 +81,13 @@ export function useBatchExtract(): UseBatchExtractResult {
         return;
       }
       if (
-        !Number.isInteger(settings.batchSize) ||
-        settings.batchSize < MIN_BATCH_SIZE ||
-        settings.batchSize > MAX_BATCH_SIZE
-      ) {
-        return;
-      }
-      if (
         !Number.isFinite(settings.thresholdOverride) ||
         settings.thresholdOverride < MIN_CONFIDENCE_THRESHOLD ||
         settings.thresholdOverride > MAX_CONFIDENCE_THRESHOLD
       ) {
+        return;
+      }
+      if (items.length > MAX_BATCH_SIZE) {
         return;
       }
 
@@ -104,9 +97,11 @@ export function useBatchExtract(): UseBatchExtractResult {
       setError(null);
       setResponse(null);
 
+      // Размер батча определяется числом загруженных карточек: все карточки
+      // уходят одним запросом (контракт ограничивает батч MAX_BATCH_SIZE).
       const payload: BatchExtractRequest = {
         items,
-        batch_size: settings.batchSize,
+        batch_size: items.length,
         threshold_override: settings.thresholdOverride,
       };
 

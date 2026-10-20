@@ -220,6 +220,36 @@ describe("PageHome", () => {
     expect(screen.getByLabelText("Выбор файла карточек")).toBeDefined();
   });
 
+  it("очищает выбранный файл по кнопке «Сброс», оставаясь на странице", () => {
+    renderHome();
+
+    fireEvent.change(screen.getByLabelText("Выбор файла карточек"), {
+      target: { files: [fakeFile()] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Сброс" }));
+
+    expect(screen.queryByText("Предпросмотр данных")).toBeNull();
+    expect(useFileParserMock).toHaveBeenLastCalledWith(null);
+    // В отличие от «Новый батч», страница загрузки не переключается.
+    expect(screen.getByLabelText("Выбор файла карточек")).toBeDefined();
+  });
+
+  it("очищает текст одиночной карточки по кнопке «Сброс»", () => {
+    renderHome();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Текст карточки" }));
+    fireEvent.change(screen.getByLabelText("Описание карточки"), {
+      target: { value: "Ручная кофемолка" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Сброс" }));
+
+    expect(screen.queryByText("Предпросмотр данных")).toBeNull();
+    expect(screen.getByLabelText("Описание карточки")).toHaveProperty(
+      "value",
+      "",
+    );
+  });
+
   it("показывает оверлей загрузки поверх страницы во время батча", () => {
     useBatchExtractMock.mockReturnValue({
       ...IDLE_BATCH,

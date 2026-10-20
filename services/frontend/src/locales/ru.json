@@ -21,7 +21,7 @@
         "title": "Предыдущие батчи",
         "empty": "Сохранённых батчей пока нет — запустите обработку на главной странице.",
         "retry": "Повторить",
-        "row": "{{total}} карточек · ok {{ok}} · низкая уверенность {{lowConfidence}} · ошибки {{errors}}",
+        "row": "{{total}} карточек · успешно {{ok}} · низкая уверенность {{lowConfidence}} · ошибки {{errors}}",
         "showMore": "Показать ещё",
         "shown_one": "Показан {{count}} батч из {{total}}",
         "shown_few": "Показано {{count}} батча из {{total}}",
@@ -56,11 +56,13 @@
   },
   "fileUpload": {
     "inputLabel": "Выбор файла карточек",
+    "fieldNamesHint": "Анализатор читает поля product_id (ID), title (название) и description (описание)",
+    "fieldNamesHintLabel": "Какие поля читает анализатор",
     "idle": "Нажмите, чтобы выбрать файл",
     "parsing": "Обработка файла…",
     "success": "Файл «{{name}}» загружен",
     "cardCount": "Карточек: {{total}}",
-    "hint": "Поддерживаются CSV, JSON и TSV, до {{size}}",
+    "hint": "Поддерживаются CSV, JSON и TSV, до {{size}}. Перетащите файл в эту область или нажмите, чтобы выбрать",
     "clear": "Убрать файл",
     "row": "Строка {{row}}",
     "errors": {
@@ -71,7 +73,7 @@
       "invalidJson": "Некорректный JSON",
       "invalidStructure": "Структура файла не соответствует ожидаемой",
       "invalidSellerAttributes": "Некорректный JSON в поле seller_attributes",
-      "noContent": "Строка не содержит title, description или seller_attributes",
+      "noContent": "Файл не содержит столбца description",
       "noCards": "В файле нет карточек"
     },
     "hints": {
@@ -82,7 +84,7 @@
       "invalidJson": "Исправьте синтаксис JSON: проверьте кавычки, запятые и скобки.",
       "invalidStructure": "Ожидается массив объектов; в CSV — строка заголовка и хотя бы одна строка с данными.",
       "invalidSellerAttributes": "Поле seller_attributes должно содержать корректный JSON-объект, например {\"brand\": \"Bosch\"}.",
-      "noContent": "Добавьте в строку хотя бы одно из полей: title, description или seller_attributes.",
+      "noContent": "Добавьте столбец с названием description (описание карточки)",
       "noCards": "Проверьте, что файл содержит данные: строки с карточками или непустой JSON-массив."
     }
   },
@@ -111,9 +113,6 @@
     "errorsCount": "Ошибок обработки: {{count}}",
     "rangeHint": "Допустимо: от {{min}} до {{max}}",
     "rangeError": "Значение вне диапазона от {{min}} до {{max}}",
-    "batchSize": {
-      "label": "Размер батча"
-    },
     "threshold": {
       "label": "Порог уверенности"
     },
@@ -133,15 +132,10 @@
       "productId": "ID товара",
       "title": "Название",
       "description": "Описание",
-      "seller_attributes": "Атрибуты продавца",
       "action": "Действия со строкой"
     },
     "validation": {
-      "present": "есть",
-      "missing": "нет",
-      "allPresent": "Все обязательные поля присутствуют",
-      "missingFields": "Отсутствуют поля: {{fields}}",
-      "noContent": "В данных нет ни одного из полей title, description или seller_attributes"
+      "missingDescription": "В одной или нескольких записях отсутствует описание."
     }
   },
   "results": {

@@ -1,5 +1,5 @@
-import { useId } from "react";
-import type { ChangeEvent } from "react";
+import { useId, useState } from "react";
+import type { ChangeEvent, DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ACCEPTED_FILE_EXTENSIONS, MAX_UPLOAD_SIZE_BYTES } from "../constants";
@@ -26,12 +26,12 @@ export type FileUploadProps = {
 };
 
 /**
- * Выбор файла карточек обычным системным диалогом по клику
- * (frontend.md, раздел 6.2; design.md, раздел 7).
+ * Выбор файла карточек обычным системным диалогом по клику либо
+ * перетаскиванием файла в область загрузки (frontend.md, раздел 6.2;
+ * design.md, раздел 7).
  *
- * Перетаскивание файлов не поддерживается: у области нет drag-and-drop
- * поведения. Компонент не разбирает файл — он принимает состояние и
- * ошибки снаружи (парсинг в `useFileParser`/`lib/fileParser`).
+ * Компонент не разбирает файл — он принимает состояние и ошибки снаружи
+ * (парсинг в `useFileParser`/`lib/fileParser`).
  */
 export default function FileUpload({
   status,
@@ -44,6 +44,7 @@ export default function FileUpload({
 }: FileUploadProps) {
   const { t } = useTranslation();
   const inputId = useId();
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const isBusy = status === "parsing";
   const isInteractive = !disabled && !isBusy;
@@ -55,6 +56,34 @@ export default function FileUpload({
     }
     // Сброс значения позволяет повторно выбрать тот же файл.
     event.target.value = "";
+  };
+
+  // Браузер по умолчанию открывает перетаскиваемый файл в новой вкладке,
+  // поэтому dragover/drop должны предотвращаться. Файл принимается, только
+  // когда область активна: во время обработки и при заблокированном
+  // состоянии drop игнорируется.
+  const handleDragOver = (event: DragEvent<HTMLLabelElement>): void => {
+    event.preventDefault();
+    if (isInteractive) {
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLLabelElement>): void => {
+    event.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLLabelElement>): void => {
+    event.preventDefault();
+    setIsDragOver(false);
+    if (!isInteractive) {
+      return;
+    }
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      onFileSelect(file);
+    }
   };
 
   let statusText: string;
@@ -83,7 +112,13 @@ export default function FileUpload({
 
   return (
     <div className={`file-upload file-upload--${status}`} aria-busy={isBusy}>
-      <label className="file-upload__zone" htmlFor={inputId}>
+      <label
+        className={`file-upload__zone${isDragOver ? " file-upload__zone--dragover" : ""}`}
+        htmlFor={inputId}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <input
           id={inputId}
           className="file-upload__input"

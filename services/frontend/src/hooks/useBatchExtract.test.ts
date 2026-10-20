@@ -3,6 +3,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, extractBatch } from "../api";
+import { MAX_BATCH_SIZE } from "../constants";
 import type { BatchExtractResponse } from "../schemas/api";
 import { useBatchExtract, type BatchSettings } from "./useBatchExtract";
 
@@ -19,7 +20,7 @@ afterEach(() => {
 });
 
 const CARDS = [{ title: "Кофемолка" }];
-const SETTINGS: BatchSettings = { batchSize: 10, thresholdOverride: 0.8 };
+const SETTINGS: BatchSettings = { thresholdOverride: 0.8 };
 
 const RESPONSE: BatchExtractResponse = {
   batch_id: "b-1",
@@ -66,9 +67,10 @@ describe("useBatchExtract", () => {
       await result.current.run(CARDS, SETTINGS);
     });
 
+    // Размер батча равен числу карточек: все они уходят одним запросом.
     expect(extractBatchMock).toHaveBeenCalledWith({
       items: CARDS,
-      batch_size: 10,
+      batch_size: 1,
       threshold_override: 0.8,
     });
     expect(result.current.status).toBe("success");
@@ -135,9 +137,22 @@ describe("useBatchExtract", () => {
     const { result } = renderHook(() => useBatchExtract());
 
     await act(async () => {
-      await result.current.run(CARDS, { ...SETTINGS, batchSize: 51 });
-      await result.current.run(CARDS, { ...SETTINGS, batchSize: 1.5 });
-      await result.current.run(CARDS, { ...SETTINGS, thresholdOverride: 1.5 });
+      await result.current.run(CARDS, { thresholdOverride: 1.5 });
+      await result.current.run(CARDS, { thresholdOverride: -0.1 });
+    });
+
+    expect(extractBatchMock).not.toHaveBeenCalled();
+    expect(result.current.status).toBe("idle");
+  });
+
+  it("не запускается, когда карточек больше максимального размера батча", async () => {
+    const tooMany = Array.from({ length: MAX_BATCH_SIZE + 1 }, () => ({
+      title: "Кофемолка",
+    }));
+    const { result } = renderHook(() => useBatchExtract());
+
+    await act(async () => {
+      await result.current.run(tooMany, SETTINGS);
     });
 
     expect(extractBatchMock).not.toHaveBeenCalled();

@@ -27,18 +27,20 @@ describe("useFileParser", () => {
   });
 
   it("разбирает файл и возвращает карточки", async () => {
-    const file = fakeFile("cards.csv", "product_id,title\np-1,Телефон");
+    const file = fakeFile("cards.csv", "product_id,description\np-1,Описание");
 
     const { result } = renderHook(() => useFileParser(file));
 
     await waitFor(() => expect(result.current.status).toBe("success"));
     expect(result.current.format).toBe("csv");
-    expect(result.current.cards).toEqual([{ product_id: "p-1", title: "Телефон" }]);
+    expect(result.current.cards).toEqual([
+      { product_id: "p-1", description: "Описание" },
+    ]);
     expect(result.current.error).toBeNull();
   });
 
   it("возвращает типизированную ошибку при сбое разбора", async () => {
-    const file = fakeFile("cards.txt", "title\nТелефон");
+    const file = fakeFile("cards.txt", "description\nОписание");
 
     const { result } = renderHook(() => useFileParser(file));
 
@@ -48,7 +50,7 @@ describe("useFileParser", () => {
   });
 
   it("сбрасывается в idle, когда файл убран", async () => {
-    const file = fakeFile("cards.csv", "title\nТелефон");
+    const file = fakeFile("cards.csv", "description\nОписание");
 
     const { result, rerender } = renderHook(
       ({ value }: { value: File | null }) => useFileParser(value),

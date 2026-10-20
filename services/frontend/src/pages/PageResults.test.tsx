@@ -214,7 +214,7 @@ describe("PageResults", () => {
 
     expect(await screen.findByText("Показано 2 батча из 2")).toBeDefined();
     const historyRow = await screen.findByRole("link", {
-      name: /2 карточек · ok 1/,
+      name: /2 карточек · успешно 1/,
     });
 
     fireEvent.click(historyRow);
@@ -251,7 +251,7 @@ describe("PageResults", () => {
     ).toBe(true);
     // …а новая порция добавлена к прежней, а не заменила её.
     expect(
-      screen.getAllByRole("link", { name: /карточек · ok/ }).length,
+      screen.getAllByRole("link", { name: /карточек · успешно/ }).length,
     ).toBe(20);
     expect(
       (screen.getByRole("button", { name: "Показать ещё" }) as HTMLButtonElement)

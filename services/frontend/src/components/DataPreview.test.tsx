@@ -4,10 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import "../i18n";
 import { PREVIEW_MAX_ROWS } from "../constants";
-import { validateInput } from "../lib/inputValidation";
 import type { ProductCardRequest } from "../schemas/api";
 import DataPreview from "./DataPreview";
-import type { DataPreviewProps } from "./DataPreview";
 
 afterEach(cleanup);
 
@@ -18,19 +16,6 @@ function card(overrides: Partial<ProductCardRequest> = {}): ProductCardRequest {
     description: "Ручная кофемолка",
     ...overrides,
   };
-}
-
-/**
- * Рендер с валидацией, посчитанной вызывающим кодом: так компонент
- * получает проп `validation`, минуя его внутренний расчёт по умолчанию.
- */
-function renderPreview(
-  cards: ProductCardRequest[],
-  props: Partial<Omit<DataPreviewProps, "cards" | "validation">> = {},
-) {
-  return render(
-    <DataPreview cards={cards} validation={validateInput(cards)} {...props} />,
-  );
 }
 
 function tableRows(): HTMLElement[] {
@@ -54,6 +39,12 @@ describe("DataPreview", () => {
     expect(screen.getByText("Турка")).toBeDefined();
   });
 
+  it("не показывает колонку атрибутов продавца", () => {
+    render(<DataPreview cards={[card()]} />);
+
+    expect(screen.queryByText("Атрибуты продавца")).toBeNull();
+  });
+
   it("показывает не больше PREVIEW_MAX_ROWS строк и сообщает общее число", () => {
     const cards = Array.from({ length: PREVIEW_MAX_ROWS + 5 }, (_, index) =>
       card({ product_id: `sku-${index}` }),
@@ -69,10 +60,10 @@ describe("DataPreview", () => {
   it("отмечает незаполненные поля отдельной меткой", () => {
     render(<DataPreview cards={[card({ description: undefined })]} />);
 
-    // Без описания и атрибутов продавца остаются две незаполненные ячейки.
+    // Без описания остаётся одна незаполненная ячейка.
     const empty = screen.getAllByTitle("поле не заполнено");
-    expect(empty).toHaveLength(2);
-    expect(empty.every((cell) => cell.textContent === "—")).toBe(true);
+    expect(empty).toHaveLength(1);
+    expect(empty[0].textContent).toBe("—");
   });
 
   it("раскрывает длинное значение по действию пользователя", () => {
@@ -101,7 +92,7 @@ describe("DataPreview", () => {
       { product_id: "p-3", title: "Третий" },
     ];
 
-    renderPreview(cards, { maxRows: 2 });
+    render(<DataPreview cards={cards} maxRows={2} />);
 
     // одна строка заголовка + две строки данных
     expect(tableRows()).toHaveLength(3);
@@ -109,54 +100,35 @@ describe("DataPreview", () => {
     expect(screen.getByText(/Показаны первые 2 из 3 карточек/)).toBeDefined();
   });
 
-  it("явно помечает недостающие поля в сводке", () => {
-    renderPreview([{ title: "Телефон" }]);
-
-    expect(screen.getByRole("status").textContent).toContain(
-      "Отсутствуют поля: Описание, Атрибуты продавца",
+  it("предупреждает, если хотя бы в одной записи нет описания", () => {
+    render(
+      <DataPreview
+        cards={[card(), { product_id: "p-2", title: "Турка" }]}
+      />,
     );
 
-    const fields = screen.getAllByRole("listitem");
-    expect(fields[0].textContent).toContain("Название");
-    expect(fields[0].textContent).toContain("есть");
-    expect(fields[1].textContent).toContain("Описание");
-    expect(fields[1].textContent).toContain("нет");
-  });
-
-  it("подтверждает сводку, когда все обязательные поля заполнены", () => {
-    renderPreview([card({ seller_attributes: { color: "чёрный" } })]);
-
     expect(screen.getByRole("status").textContent).toContain(
-      "Все обязательные поля присутствуют",
+      "В одной или нескольких записях отсутствует описание.",
     );
   });
 
-  it("помечает ячейки с отсутствующими значениями", () => {
-    renderPreview([{ product_id: "p-1", title: "Телефон" }]);
+  it("не показывает предупреждений, когда описание есть во всех записях", () => {
+    render(<DataPreview cards={[card(), card({ product_id: "sku-2" })]} />);
 
-    // description и seller_attributes отсутствуют
-    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("показывает ошибку, когда обязательных полей нет", () => {
-    renderPreview([{ product_id: "p-1" }]);
+  it("предупреждает и при записи вообще без обязательных полей", () => {
+    render(<DataPreview cards={[{ product_id: "p-1" }]} />);
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "нет ни одного из полей title, description или seller_attributes",
+    expect(screen.getByRole("status").textContent).toContain(
+      "В одной или нескольких записях отсутствует описание.",
     );
   });
 
   it("сообщает об отсутствии данных предпросмотра", () => {
-    renderPreview([]);
+    render(<DataPreview cards={[]} />);
 
     expect(screen.getByText("Нет данных для предпросмотра")).toBeDefined();
-  });
-
-  it("сериализует seller_attributes в ячейке", () => {
-    renderPreview([
-      { product_id: "p-1", seller_attributes: { color: "чёрный" } },
-    ]);
-
-    expect(screen.getByText('{"color":"чёрный"}')).toBeDefined();
   });
 });

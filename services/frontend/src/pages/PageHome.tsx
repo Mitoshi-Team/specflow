@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import BatchControls from "../components/BatchControls";
 import CardTextInput from "../components/CardTextInput";
 import DataPreview from "../components/DataPreview";
+import FieldNamesHint from "../components/FieldNamesHint";
 import FileUpload from "../components/FileUpload";
 import InputModeSwitch from "../components/InputModeSwitch";
 import type { InputMode } from "../components/InputModeSwitch";
@@ -82,6 +83,17 @@ export default function PageHome() {
     navigate("/");
   };
 
+  // «Сброс» в панели батча возвращает страницу к исходному вводу: очищает
+  // выбранный файл (или текст одиночной карточки) и состояние батча, не
+  // покидая страницу. Порог уверенности компонент сбрасывает сам
+  // (`BatchControls`).
+  const handleReset = (): void => {
+    batch.reset();
+    setSubmitted(null);
+    setFile(null);
+    setDescription("");
+  };
+
   // Запоминаем отправленные карточки и настройки: ответ батча несёт только
   // результат, а странице результатов нужен ещё и порог уверенности, чтобы
   // пояснить низкоуверенные значения (frontend.md, сценарий 3).
@@ -136,6 +148,7 @@ export default function PageHome() {
         <div className="panel__header">
           <h2 className="panel__title" id={uploadTitleId}>
             {t("upload.title")}
+            {isFileMode ? <FieldNamesHint /> : null}
           </h2>
           <InputModeSwitch value={mode} onChange={setMode} />
         </div>
@@ -214,7 +227,7 @@ export default function PageHome() {
           error={batch.error}
           response={batch.response}
           onStart={handleStart}
-          onReset={batch.reset}
+          onResetAll={handleReset}
         />
       </section>
 

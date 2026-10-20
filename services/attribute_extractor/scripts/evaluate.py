@@ -242,6 +242,20 @@ def rerun_predictions(gold_path: Path) -> list[dict[str, Any]]:
     return results
 
 
+def new_field_share(results: list[dict[str, Any]]) -> float:
+    """Доля кандидатов с авто-новыми полями (is_new_field) — дрейф каталога (§8)."""
+    total = sum(len(result.get("attributes", [])) for result in results)
+    if not total:
+        return 0.0
+    new_fields = sum(
+        1
+        for result in results
+        for attribute in result.get("attributes", [])
+        if attribute.get("is_new_field")
+    )
+    return new_fields / total
+
+
 def build_report(
     records: list[dict[str, Any]],
     results: list[dict[str, Any]],
@@ -261,6 +275,7 @@ def build_report(
         "coverage": coverage_metrics(gold, preds),
         "categories": category_breakdown(records, gold, preds),
         "below_threshold": below_threshold_shares(results),
+        "new_field_share": new_field_share(results),
         "auto_threshold": AUTO_THRESHOLD,
     }
     if grounding is not None:

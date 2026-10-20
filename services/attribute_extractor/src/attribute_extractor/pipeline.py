@@ -124,8 +124,13 @@ class ExtractPipeline:
             candidate.features and CONFLICT_FEATURE_KEY in candidate.features
             for candidate in candidates
         )
+        # Авто-новое поле (Этап 5) всегда требует ручной проверки: канонический
+        # код назначает только аудит (domain-model.md, повышение is_new_field).
+        has_new_field = any(candidate.is_new_field for candidate in candidates)
         required_missing = _required_missing(candidates, preprocessed)
-        needs_review = bool(low_confidence_count or has_conflict or required_missing)
+        needs_review = bool(
+            low_confidence_count or has_conflict or required_missing or has_new_field
+        )
         if needs_review:
             status = (
                 ExtractionStatus.PARTIAL if required_missing else ExtractionStatus.LOW_CONFIDENCE

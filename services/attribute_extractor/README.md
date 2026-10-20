@@ -302,7 +302,8 @@ seller-атрибутах и недостижимые из текста, иск�
 - `src/attribute_extractor/rate_limit.py` — ограничение частоты запросов
   (in-memory sliding window → 429 с `Retry-After`).
 - `src/attribute_extractor/extractors/` — `BaseExtractor`, `ExtractorRegistry`,
-  `RuleExtractor` (✅), `NERExtractor` (пейринг + `ner_score`).
+  `RuleExtractor` (✅), `NERExtractor` (пейринг + `ner_score` + резолв
+  полей Этапа 5 через инъекции `SpanPredictor`/`FieldResolver`).
 - `src/attribute_extractor/vector_index.py` — `VectorIndex` (Protocol) и
   `LexicalVectorIndex`/`InMemoryVectorIndex` (graceful degradation).
 - `src/attribute_extractor/fields.py` — `FieldCatalog`, `FieldBlocklist`,
@@ -351,13 +352,31 @@ uv run uvicorn attribute_extractor.main:app --port 8001 --reload
 python services/attribute_extractor/scripts/run_batch.py data/cards.csv --out /tmp/preds --csv
 ```
 
-Результат — `predictions.jsonl` (сериализованные `ExtractionResult`) плюс
-`predictions.csv` в формате PredictionRow по флагу `--csv`. Быстрая проба —
-`--max-items 10`, размер части — `--batch-size` (по умолчанию 20).
+Результат — `predictions.jsonl` (сериализованные `ExtractionResult`), очередь
+ручной проверки `needs_review.csv` (пишется всегда) плюс `predictions.csv` в
+формате PredictionRow по флагу `--csv`. Быстрая проба — `--max-items 10`,
+размер части — `--batch-size` (по умолчанию 20).
+
+#### Очередь ручной проверки (`needs_review.csv`)
+
+Все `needs_review`-карточки прогона попадают в `needs_review.csv`: кандидаты —
+по строке на причину (`new_field` — авто-новое поле Этапа 5,
+`low_confidence`, `conflict`), карточные причины без кандидата — одной
+строкой (`required_missing`, `card_error`, `skipped`). Колонки: идентификация
+карточки, `reason`, значения и оценки кандидата (`confidence`, `ner_score`,
+`match_score`, `is_new_field`, `characteristic` из NER-пары, координаты
+спана) и пустая колонка `decision` для ручных отметок. Значения
+санитизируются от CSV-формул (префикс `'` для `= + - @`).
+
+Повышение авто-нового поля в канон: по итогам разбора очередь вносится в
+`field_catalog_seed.py` (код, имя, синонимы), затем пересобирается каталог
+`scripts/build_field_catalog.py`; после этого новые записи совпадают со
+спецификацией Этапа 5 как канонические поля.
 
 Метрики качества на gold-наборе — скрипт `scripts/evaluate.py`: P/R/F1
 по каждому атрибуту (макро/микро), coverage, разрез по категориям, доля
-кандидатов ниже порога; сравнение exact-match по `normalized_value`
+кандидатов ниже порога, доля авто-новых полей (`new_field_share` — дрейф
+каталога); сравнение exact-match по `normalized_value`
 на паре `(product_id, attribute_code)`. Без `--predictions` пайплайн
 прогоняется по gold-карточкам заново; `--grounding-stats` дополнительно
 оценивает долю кандидатов, отброшенных фильтром grounding:

@@ -32,6 +32,7 @@ if str(_SRC_DIR) not in sys.path:
 from attribute_extractor.constants import (  # noqa: E402
     AUTO_THRESHOLD,
     CONFLICT_FEATURE_KEY,
+    CONFLICT_VALUES_KEY,
     NER_CHARACTERISTIC_FEATURE_KEY,
     REVIEW_CSV_COLUMNS,
     RUN_BATCH_CSV_BASE_COLUMNS,
@@ -207,10 +208,15 @@ def _write_review_csv(predictions: list[tuple[Any, Any]], path: Path) -> None:
             emitted = False
             for candidate in result.attributes:
                 characteristic = ""
+                conflict_values = ""
                 if candidate.features:
                     characteristic = str(
                         candidate.features.get(NER_CHARACTERISTIC_FEATURE_KEY) or ""
                     )
+                    values = candidate.features.get(CONFLICT_VALUES_KEY)
+                    if isinstance(values, list):
+                        # Победитель первым (merging) — первым виден в ячейке.
+                        conflict_values = " vs ".join(str(value) for value in values)
                 for reason in _candidate_reasons(candidate):
                     row: dict[str, Any] = {column: "" for column in REVIEW_CSV_COLUMNS}
                     row.update(base)
@@ -219,6 +225,7 @@ def _write_review_csv(predictions: list[tuple[Any, Any]], path: Path) -> None:
                             "reason": reason,
                             "attribute_code": candidate.attribute_code,
                             "characteristic": characteristic,
+                            "conflict_values": conflict_values,
                             "raw_value": candidate.raw_value,
                             "normalized_value": candidate.normalized_value,
                             "confidence": candidate.confidence,

@@ -289,9 +289,6 @@ GENERIC_SCHEMA_VERSION = "1.0.0"
 CONFLICT_FEATURE_KEY = "conflict"
 """Ключ признака в ``AttributeCandidate.features``, отмечающий конфликт значений."""
 
-NER_CHARACTERISTIC_FEATURE_KEY = "characteristic"
-"""Ключ в ``AttributeCandidate.features``: имя характеристики из NER-пары."""
-
 # --- Grounding Validation (Этап 9) -------------------------------------------
 
 DECIMAL_COMMA_PATTERN = r"(?<=\d),(?=\d)"

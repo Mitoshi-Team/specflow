@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from attribute_extractor.constants import (
-    NER_CHARACTERISTIC_FEATURE_KEY,
+    FEATURE_CHARACTERISTIC,
     NER_EXTRACTOR_NAME,
     NER_EXTRACTOR_PRIORITY,
     NER_LABEL_CHARACTERISTIC,
@@ -152,7 +152,7 @@ class NERExtractor(BaseExtractor):
             ner_score=pair.ner_score,
             match_score=match.match_score,
             is_new_field=match.is_new_field,
-            features={NER_CHARACTERISTIC_FEATURE_KEY: pair.characteristic},
+            features={FEATURE_CHARACTERISTIC: pair.characteristic},
         )
 
 

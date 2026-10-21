@@ -189,7 +189,7 @@ def _review_result(
 
 
 def _new_field_candidate():
-    from attribute_extractor.constants import NER_CHARACTERISTIC_FEATURE_KEY
+    from attribute_extractor.constants import FEATURE_CHARACTERISTIC
     from specflow_contracts import AttributeCandidate, ExtractionMethod
 
     return AttributeCandidate(
@@ -202,7 +202,7 @@ def _new_field_candidate():
         evidence_text="IPS",
         ner_score=0.95,
         is_new_field=True,
-        features={NER_CHARACTERISTIC_FEATURE_KEY: "Матрица"},
+        features={FEATURE_CHARACTERISTIC: "Матрица"},
     )
 
 

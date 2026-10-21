@@ -33,7 +33,7 @@ from attribute_extractor.constants import (  # noqa: E402
     AUTO_THRESHOLD,
     CONFLICT_FEATURE_KEY,
     CONFLICT_VALUES_KEY,
-    NER_CHARACTERISTIC_FEATURE_KEY,
+    FEATURE_CHARACTERISTIC,
     REVIEW_CSV_COLUMNS,
     RUN_BATCH_CSV_BASE_COLUMNS,
     RUN_BATCH_CSV_NAME,
@@ -210,9 +210,7 @@ def _write_review_csv(predictions: list[tuple[Any, Any]], path: Path) -> None:
                 characteristic = ""
                 conflict_values = ""
                 if candidate.features:
-                    characteristic = str(
-                        candidate.features.get(NER_CHARACTERISTIC_FEATURE_KEY) or ""
-                    )
+                    characteristic = str(candidate.features.get(FEATURE_CHARACTERISTIC) or "")
                     values = candidate.features.get(CONFLICT_VALUES_KEY)
                     if isinstance(values, list):
                         # Победитель первым (merging) — первым виден в ячейке.

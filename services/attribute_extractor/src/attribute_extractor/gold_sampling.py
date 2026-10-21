@@ -12,6 +12,15 @@ import random
 from collections import Counter
 from collections.abc import Mapping, Sequence
 
+from attribute_extractor.constants import (
+    GOLD_EXPANSION_SEED,
+    GOLD_EXPANSION_SIZE,
+    GOLD_HARD_SET_MAX_SIZE,
+    GOLD_HARD_SET_MIN_SIZE,
+    GOLD_SOURCE_CORPUS,
+    GOLD_SOURCES,
+    GOLD_TAG_HARD,
+)
 from attribute_extractor.field_catalog_seed import CANONICAL_FIELDS
 from attribute_extractor.grounding import GroundingValidator
 from specflow_contracts import AttributeCandidate, ExtractionMethod, ProductCard
@@ -41,12 +50,35 @@ GOLD_CATEGORY_QUOTAS = {
 недостающие добираются из остальных категорий (см. ``select_diverse``).
 """
 
+GOLD_EXPANSION_QUOTAS = {
+    "Смартфоны": 30,
+    "iPhone": 15,
+    "Ноутбуки": 25,
+    "Планшеты": 12,
+    "Телевизоры": 12,
+    "Мониторы": 8,
+    "Наушники": 10,
+    "Роботы-пылесосы": 8,
+    "Пылесосы напольные": 10,
+    "Стиральные машины": 8,
+    "Холодильники": 6,
+    "Микроволновые печи соло": 6,
+}
+"""Страта расширения gold-набора.
+
+Квоты дополняют ``GOLD_CATEGORY_QUOTAS``: кроме основных категорий сюда входят
+редкие категории каталога (пылесосы напольные, стиральные машины,
+холодильники, микроволновые печи), которых в корпусном сэмпле не было, — без
+них атрибуты вроде ``battery_capacity`` не имеют массовой поддержки.
+
+Сумма квот равна ``GOLD_EXPANSION_SIZE``.
+"""
+
 MAX_PER_CATEGORY = 10
 """Максимум карточек одной категории в сэмпле."""
 
 MAX_PER_VENDOR = 6
 """Максимум карточек одного продавца в сэмпле."""
-
 MIN_DESCRIPTION_CHARS = 40
 """Минимальная длина описания, если атрибутов продавца мало."""
 
@@ -180,6 +212,92 @@ def select_diverse(
     return selected
 
 
+def existing_sku_ids(records: Sequence[Mapping]) -> set[str]:
+    """Собрать sku_id карточек, уже входящих в gold-набор.
+
+    Нужен, чтобы расширение не пересекалось с исходным корпусным сэмплом:
+    повторная карточка искажает метрики (тот же текст учитывается дважды).
+    """
+    skus: set[str] = set()
+    for record in records:
+        card = record.get("card")
+        if not isinstance(card, Mapping):
+            continue
+        sku_id = str(card.get("sku_id") or "").strip()
+        if sku_id:
+            skus.add(sku_id)
+    return skus
+
+
+def select_expansion(
+    cards: Sequence[Mapping],
+    count: int = GOLD_EXPANSION_SIZE,
+    *,
+    seed: int = GOLD_EXPANSION_SEED,
+    quotas: Mapping[str, int] | None = None,
+    exclude_skus: frozenset[str] | set[str] = frozenset(),
+    max_per_category: int = MAX_PER_CATEGORY,
+    max_per_vendor: int = MAX_PER_VENDOR,
+) -> list[Mapping]:
+    """Отобрать карточки расширения gold-набора.
+
+    Отличие от ``select_diverse`` — исключение уже использованных ``sku_id``
+    и стабильная сортировка результата по ``sku_id``: состав расширения не
+    должен зависеть от порядка исходного пула.
+    """
+    pool = [card for card in cards if str(card.get("sku_id") or "") not in exclude_skus]
+    selected = select_diverse(
+        pool,
+        count,
+        seed=seed,
+        quotas=quotas,
+        max_per_category=max_per_category,
+        max_per_vendor=max_per_vendor,
+    )
+    return sorted(selected, key=lambda card: str(card.get("sku_id") or ""))
+
+
+def merge_gold_records(
+    base: Sequence[Mapping],
+    extra: Sequence[Mapping],
+) -> list[Mapping]:
+    """Объединить два gold-набора без дублей по ``sku_id``.
+
+    Записи ``base`` идут первыми, записи ``extra`` добавляются после; запись с
+    уже встречающимся ``sku_id`` пропускается (первый источник выигрывает).
+    """
+    merged: list[Mapping] = []
+    seen: set[str] = set()
+    for record in (*base, *extra):
+        card = record.get("card")
+        sku_id = str(card.get("sku_id") or "").strip() if isinstance(card, Mapping) else ""
+        if sku_id and sku_id in seen:
+            continue
+        if sku_id:
+            seen.add(sku_id)
+        merged.append(record)
+    return merged
+
+
+def gold_source(record: Mapping) -> str:
+    """Источник gold-записи: ``corpus`` по умолчанию, ``curated`` — вручную."""
+    source = str(record.get("source") or "").strip()
+    return source or GOLD_SOURCE_CORPUS
+
+
+def is_hard_case(record: Mapping) -> bool:
+    """Относится ли запись к hard set (помечена меткой ``hard``)."""
+    tags = record.get("tags")
+    if not isinstance(tags, (list, tuple)):
+        return False
+    return GOLD_TAG_HARD in {str(tag) for tag in tags}
+
+
+def hard_set_records(records: Sequence[Mapping]) -> list[Mapping]:
+    """Выбрать из gold-набора записи, помеченные как hard cases."""
+    return [record for record in records if is_hard_case(record)]
+
+
 def validate_gold(records: Sequence[Mapping]) -> list[str]:
     """Проверить структуру gold-записей; вернуть список ошибок (пусто — ок)."""
     errors: list[str] = []
@@ -215,6 +333,34 @@ def validate_gold(records: Sequence[Mapping]) -> list[str]:
                 codes.add(code)
             if not str(item.get("normalized_value") or "").strip():
                 errors.append(f"record {index}: пустое значение для {code!r}")
+
+        source = record.get("source")
+        if source is not None and str(source) not in GOLD_SOURCES:
+            errors.append(f"record {index}: неизвестный источник {source!r}")
+
+        tags = record.get("tags")
+        if tags is not None:
+            if not isinstance(tags, (list, tuple)):
+                errors.append(f"record {index}: tags не список")
+            elif any(not str(tag).strip() for tag in tags):
+                errors.append(f"record {index}: пустой тег")
+    return errors
+
+
+def validate_hard_set(records: Sequence[Mapping]) -> list[str]:
+    """Проверить hard set: размер в допустимом диапазоне и все записи помечены.
+
+    Возвращает список ошибок (пусто — ок).
+    """
+    errors: list[str] = []
+    if not GOLD_HARD_SET_MIN_SIZE <= len(records) <= GOLD_HARD_SET_MAX_SIZE:
+        errors.append(
+            f"размер hard set {len(records)} вне диапазона "
+            f"{GOLD_HARD_SET_MIN_SIZE}..{GOLD_HARD_SET_MAX_SIZE}"
+        )
+    for index, record in enumerate(records):
+        if not is_hard_case(record):
+            errors.append(f"hard set record {index}: нет метки {GOLD_TAG_HARD!r}")
     return errors
 
 

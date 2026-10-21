@@ -3,7 +3,8 @@
 Примеры:
 
     python scripts/evaluate.py --gold gold/gold.jsonl --predictions /tmp/preds/predictions.jsonl
-    python scripts/evaluate.py --gold gold/gold.jsonl --rerun --grounding-stats --out /tmp/m.json
+    python scripts/evaluate.py --gold gold/gold.jsonl --gold-extra gold/gold_expansion.jsonl \\
+        --rerun --grounding-stats --out /tmp/m.json
 
 Сопоставление по паре ``(product_id, attribute_code)``, сравнение exact-match
 по ``normalized_value`` (пересечение множеств, совместимо с allow_multiple).
@@ -17,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,7 @@ from attribute_extractor.constants import (  # noqa: E402
     EVALUATE_METRICS_JSON_NAME,
     EVALUATE_THRESHOLD_GRID,
 )
+from attribute_extractor.gold_sampling import gold_source  # noqa: E402
 
 _DEFAULT_GOLD = _SERVICE_DIR / "gold" / "gold.jsonl"
 
@@ -39,6 +42,32 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [
         json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
+
+
+def as_paths(gold_paths: Path | Sequence[Path]) -> list[Path]:
+    """Привести один путь или список путей к списку путей."""
+    if isinstance(gold_paths, (str, Path)):
+        return [Path(gold_paths)]
+    return [Path(path) for path in gold_paths]
+
+
+def load_gold_records(gold_paths: Path | Sequence[Path]) -> list[dict[str, Any]]:
+    """Загрузить gold-записи из одного или нескольких файлов.
+
+    Карточки с одинаковым ``sku_id`` не дублируются: первая встретившаяся
+    запись выигрывает (базовый файл важнее расширения).
+    """
+    records: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for path in as_paths(gold_paths):
+        for record in load_jsonl(path):
+            product_id = _gold_id(record.get("card", {}))
+            if product_id is not None:
+                if product_id in seen:
+                    continue
+                seen.add(product_id)
+            records.append(record)
+    return records
 
 
 def _gold_id(card: dict[str, Any]) -> str | None:
@@ -167,6 +196,37 @@ def category_breakdown(
     return breakdown
 
 
+def source_breakdown(
+    records: list[dict[str, Any]],
+    gold: dict[str, dict[str, set[str]]],
+    preds: dict[str, dict[str, set[str]]],
+) -> dict[str, dict[str, Any]]:
+    """Метрики отдельно по источнику gold-карточек (``corpus``/``curated``).
+
+    Расширение набора меняет и объём, и состав выборки, поэтому сводные
+    метрики «до/после» без разбивки по источнику нельзя читать как
+    улучшение пайплайна: разрез показывает вклад каждой части набора.
+    """
+    sources = {
+        _gold_id(record.get("card", {})): gold_source(record)
+        for record in records
+        if _gold_id(record.get("card", {})) is not None
+    }
+    breakdown: dict[str, dict[str, Any]] = {}
+    for source in sorted(set(sources.values())):
+        product_ids = [pid for pid, src in sources.items() if src == source]
+        gold_part = {pid: gold[pid] for pid in product_ids if pid in gold}
+        preds_part = {pid: preds[pid] for pid in product_ids if pid in preds}
+        counts = compute_counts(gold_part, preds_part)
+        metrics = attribute_metrics(counts)
+        breakdown[source] = {
+            "products": len(product_ids),
+            "macro": _macro_average(metrics),
+            "micro": _micro_average(counts),
+        }
+    return breakdown
+
+
 def below_threshold_shares(
     results: list[dict[str, Any]], thresholds: tuple[float, ...] = EVALUATE_THRESHOLD_GRID
 ) -> dict[str, float]:
@@ -184,7 +244,7 @@ def below_threshold_shares(
     }
 
 
-def grounding_stats(gold_path: Path) -> dict[str, float | int]:
+def grounding_stats(gold_paths: Path | Sequence[Path]) -> dict[str, float | int]:
     """Доля кандидатов, отброшенных grounding (два прогона пайплайна).
 
     Сравниваются суммарные числа атрибутов при ``grounding_required=true`` и
@@ -193,7 +253,7 @@ def grounding_stats(gold_path: Path) -> dict[str, float | int]:
     from attribute_extractor.config import Settings
     from attribute_extractor.pipeline import ExtractPipeline
 
-    records = load_jsonl(gold_path)
+    records = load_gold_records(gold_paths)
     totals: dict[bool, int] = {}
     for grounding_required in (False, True):
         settings = Settings(grounding_required=grounding_required)
@@ -228,14 +288,14 @@ def _record_card(record: dict[str, Any]) -> Any:
     )
 
 
-def rerun_predictions(gold_path: Path) -> list[dict[str, Any]]:
+def rerun_predictions(gold_paths: Path | Sequence[Path]) -> list[dict[str, Any]]:
     """Прогнать пайплайн по gold-карточкам (когда predictions.jsonl нет)."""
     from attribute_extractor.config import Settings
     from attribute_extractor.pipeline import ExtractPipeline
 
     pipeline = ExtractPipeline(settings=Settings())
     results = []
-    for record in load_jsonl(gold_path):
+    for record in load_gold_records(gold_paths):
         card = _record_card(record)
         if card is not None:
             results.append(pipeline.extract(card).model_dump())
@@ -274,6 +334,7 @@ def build_report(
         "micro": _micro_average(counts),
         "coverage": coverage_metrics(gold, preds),
         "categories": category_breakdown(records, gold, preds),
+        "by_source": source_breakdown(records, gold, preds),
         "below_threshold": below_threshold_shares(results),
         "new_field_share": new_field_share(results),
         "auto_threshold": AUTO_THRESHOLD,
@@ -350,6 +411,17 @@ def format_report(report: dict[str, Any]) -> str:
     lines.append(
         f"{'микро':<20}{micro['precision']:>7.2f}{micro['recall']:>7.2f}{micro['f1']:>7.2f}"
     )
+    if report.get("by_source"):
+        lines.append("По источнику gold-карточек:")
+        for source, entry in report["by_source"].items():
+            macro_src, micro_src = entry["macro"], entry["micro"]
+            lines.append(
+                f"  {source}: карточек {entry['products']} | "
+                f"макро P={macro_src['precision']:.2f} R={macro_src['recall']:.2f} "
+                f"F1={macro_src['f1']:.2f} | "
+                f"микро P={micro_src['precision']:.2f} R={micro_src['recall']:.2f} "
+                f"F1={micro_src['f1']:.2f}"
+            )
     lines.append("Доля кандидатов ниже порога (нагрузка ручной проверки):")
     for threshold, share in report["below_threshold"].items():
         lines.append(f"  {threshold}: {share:.2%}")
@@ -365,6 +437,17 @@ def format_report(report: dict[str, Any]) -> str:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Метрики качества извлечения на gold-наборе.")
     parser.add_argument("--gold", type=Path, default=_DEFAULT_GOLD, help="Путь к gold.jsonl.")
+    parser.add_argument(
+        "--gold-extra",
+        type=Path,
+        action="append",
+        default=[],
+        metavar="GOLD_JSONL",
+        help=(
+            "дополнительный gold-файл (например, gold/gold_expansion.jsonl); "
+            "можно указать несколько, карточки объединяются без дублей"
+        ),
+    )
     parser.add_argument(
         "--predictions",
         type=Path,
@@ -393,19 +476,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    if not args.gold.exists():
-        print(f"gold-файл не найден: {args.gold}", file=sys.stderr)
-        return 1
-    records = load_jsonl(args.gold)
+    gold_paths = [args.gold, *args.gold_extra]
+    for path in gold_paths:
+        if not path.exists():
+            print(f"gold-файл не найден: {path}", file=sys.stderr)
+            return 1
+    records = load_gold_records(gold_paths)
     if args.predictions is not None:
         if not args.predictions.exists():
             print(f"файл предсказаний не найден: {args.predictions}", file=sys.stderr)
             return 1
         results = load_jsonl(args.predictions)
-        grounding = grounding_stats(args.gold) if args.grounding_stats else None
+        grounding = grounding_stats(gold_paths) if args.grounding_stats else None
     else:
-        results = rerun_predictions(args.gold)
-        grounding = grounding_stats(args.gold) if args.grounding_stats else None
+        results = rerun_predictions(gold_paths)
+        grounding = grounding_stats(gold_paths) if args.grounding_stats else None
     report = build_report(records, results, grounding=grounding)
     print(format_report(report))
     if args.out is not None:

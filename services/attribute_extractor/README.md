@@ -272,11 +272,51 @@ in-memory/lexical) не фиксируется. `resolve_field` возвраща
 seller-атрибутах и недостижимые из текста, исключаются из `expected` с
 пометкой в `notes`.
 
+### 4.1. Расширение набора: `curated`-часть
+
+Корпусный сэмпл дополнен 150 карточками, размеченными вручную (корпусный
+датасет в рабочем окружении недоступен, поэтому карточки составлены в его
+стиле). Файлы:
+
+| Файл | Назначение | Карточек |
+|---|---|---|
+| `gold/gold.jsonl` | корпусный сэмпл (не изменялся) | 100 |
+| `gold/curated_cards.json` | источник разметки: карточки с `expected`, `notes`, `tags` | 150 |
+| `gold/gold_expansion.jsonl` | собранное расширение (`source: "curated"`) | 150 |
+| `gold/hard_set.jsonl` | сложные карточки (метка `hard`) | 25 |
+
+Квоты расширения — `GOLD_EXPANSION_QUOTAS` (`gold_sampling.py`): смартфоны 30,
+iPhone 15, ноутбуки 25, планшеты 12, телевизоры 12, наушники 10, пылесосы
+напольные 10, мониторы 8, роботы-пылесосы 8, стиральные машины 8,
+холодильники 6, микроволновые печи соло 6. Четыре редкие категории
+(пылесосы напольные, стиральные машины, холодильники, микроволновые печи) в
+корпусном сэмпле отсутствовали — без них оценка по редким категориям и
+массовая поддержка `battery_capacity`/`color` невозможны.
+
+Каждая карточка расширения помечена источником (`source: "curated"`) и,
+если она сложная, меткой `hard` + типом сложности (`conflicting-canon`,
+`absent-in-text`, `marketing-name`, `range-value`, `unit-variant`,
+`iphone-processor`). Для hard-карточек в `notes` зафиксировано, почему выбрано
+именно это значение.
+
+Сборка и валидация (структура, grounding, отсутствие пересечения `sku_id` с
+корпусным gold, размер hard set):
+
+```bash
+python services/attribute_extractor/scripts/build_gold_curated.py --check
+python services/attribute_extractor/scripts/build_gold_curated.py
+```
+
+Метрики «до/после» и разбор ошибок — в
+`docs/gold-expansion-report.md`.
+
 **Валидация:** `validate_gold` (структура, дубликаты sku, канонические коды)
 и `grounding_errors` (подтверждение текстом карточки); регрессионный тест на
-файл — `TestGoldDataset` в `test_attribute_extractor_gold_sampling.py`. Gold
+файл — `TestGoldDataset` в `test_attribute_extractor_gold_sampling.py`,
+на расширение — `test_attribute_extractor_gold_expansion.py`. Gold
 используется для Precision/Recall/F1 по атрибутам и настройки
 `MATCH_THRESHOLD`/`AUTO_THRESHOLD` (см. метрики в `attribute_extractor.md`).
+
 
 ## 5. Устройство
 
@@ -389,6 +429,17 @@ python services/attribute_extractor/scripts/run_batch.py data/cards.csv --out /t
 python services/attribute_extractor/scripts/evaluate.py \
   --gold services/attribute_extractor/gold/gold.jsonl \
   --predictions /tmp/preds/predictions.jsonl --out /tmp/metrics.json
+```
+
+Дополнительные gold-файлы (например, расширение набора) подключаются через
+`--gold-extra` — карточки объединяются без дублей по `sku_id`, а метрики
+разбиваются по источнику (`by_source`: `corpus`/`curated`):
+
+```bash
+python services/attribute_extractor/scripts/evaluate.py \
+  --gold services/attribute_extractor/gold/gold.jsonl \
+  --gold-extra services/attribute_extractor/gold/gold_expansion.jsonl \
+  --grounding-stats --out /tmp/metrics.json
 ```
 
 Реестр схем категорий для `/categories` и Этапа 1 собирается из

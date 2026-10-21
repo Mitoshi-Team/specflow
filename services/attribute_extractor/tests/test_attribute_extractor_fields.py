@@ -154,3 +154,23 @@ def test_field_resolver_survives_corrupt_catalog_file(tmp_path):
     store.catalog_path.write_text("{битый json", encoding="utf-8")
     r = fields.FieldResolver(store=store)
     assert r.catalog.all() == []
+
+
+def test_persist_new_fields_accumulate_after_repeated_load(tmp_path):
+    """Кэш персиста: каждое авто-добавление догоняет файл целиком.
+
+    Регрессия к O(N²): при N авто-добавлениях файл перечитывался и
+    перепарсивался N раз; при сбое записи очередное поле не терялось при
+    следующей успешной записи.
+    """
+    import json
+
+    store = _store(tmp_path)
+    r = fields.FieldResolver(store=store)
+    first = r.resolve("объём памяти")
+    second = r.resolve("цвет бампера")
+    assert first.is_new_field and second.is_new_field
+
+    data = json.loads(store.catalog_path.read_text(encoding="utf-8"))
+    codes = [entry["code"] for entry in data["entries"]]
+    assert codes == ["obem_pamyati", "tsvet_bampera"]

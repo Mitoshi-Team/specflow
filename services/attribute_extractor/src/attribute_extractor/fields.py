@@ -125,6 +125,7 @@ class FieldResolver:
         # поля живут только в памяти (domain-model.md: авто-добавление —
         # управляемое поведение, а не побочный эффект).
         self.persist_new_fields = persist_new_fields
+        self._persist_cache: dict | None = None
         self._index_catalog()
 
     def _index_catalog(self) -> None:
@@ -181,12 +182,19 @@ class FieldResolver:
         if not self.persist_new_fields:
             return
         try:
-            data = self.store.load_catalog()
-            entries = data.get("entries", [])
+            if self._persist_cache is None:
+                # Файл читается один раз; далее добавления живут в кэше и
+                # записываются целиком. Перечитывать и перепарсивать весь JSON
+                # на каждое авто-добавление нельзя: поля накапливаются без
+                # лимита (Этап 5), резолв деградировал бы со временем службы.
+                # Единственный резолвер на процесс — перезапись конкурентных
+                # изменений других процессов не практикуется.
+                self._persist_cache = self.store.load_catalog()
+            entries = self._persist_cache.get("entries", [])
             if not any(e.get("code") == code for e in entries):
                 entries.append({"code": code, "name_ru": characteristic, "is_new_field": True})
-                data["entries"] = entries
-                self.store.save_catalog(data)
+                self._persist_cache["entries"] = entries
+                self.store.save_catalog(self._persist_cache)
         except Exception:  # noqa: BLE001 — персистентность best effort, отказ не должен ронять резолв
             # Сбой записи не должен прерывать разрешение карточки (новое поле
             # уже в памяти), но обязан фиксироваться с traceback: раньше поле

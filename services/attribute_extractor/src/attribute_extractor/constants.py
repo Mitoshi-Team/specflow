@@ -863,6 +863,39 @@ NER_LABEL_PROPERTY = "PROPERTY"
 NER_PAIR_WINDOW = 32
 """Окно пейринга PROPERTY ↔ CHARACTERISTIC (токены)."""
 
+NER_BIO_OUTSIDE = "O"
+"""BIO-метка: токен вне сущности."""
+
+NER_BIO_PREFIX_BEGIN = "B-"
+"""BIO-префикс: первый токен сущности."""
+
+NER_BIO_PREFIX_INSIDE = "I-"
+"""BIO-префикс: продолжение сущности."""
+
+DEFAULT_NER_BASE_MODEL = "DeepPavlov/rubert-base-cased"
+"""Базовая модель для обучения NER (ruBERT-base)."""
+
+NER_TRAIN_EPOCHS = 3
+"""Число эпох обучения NER."""
+
+NER_TRAIN_BATCH_SIZE = 16
+"""Размер батча обучения NER."""
+
+NER_TRAIN_LEARNING_RATE = 3e-5
+"""Скорость обучения NER."""
+
+NER_TRAIN_MAX_LENGTH = 512
+"""Максимальная длина последовательности (токены) при обучении NER."""
+
+NER_TRAIN_SEED = 42
+"""Seed обучения NER."""
+
+NER_LABELS_FILENAME = "labels.json"
+"""Имя файла со списком BIO-меток рядом с моделью."""
+
+NER_TRAIN_METRICS_FILENAME = "metrics.json"
+"""Имя файла с метриками обучения NER."""
+
 FEATURE_CHARACTERISTIC = "characteristic"
 """Ключ features: исходная характеристика до резолва."""
 

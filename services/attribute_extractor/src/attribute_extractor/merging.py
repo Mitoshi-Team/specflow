@@ -6,7 +6,9 @@
 становится значением атрибута. Спаны и features объединяются только от
 кандидатов с тем же значением, что и у победителя. Если в группе есть
 кандидаты с другим ``normalized_value`` — в ``features`` проставляется
-``conflict`` (downstream-этап выставляет ``needs_review``). Никаких весов
+``conflict`` плюс список конкурировавших значений ``conflict_values``
+(победитель первым — для очереди ручной проверки; downstream-этап
+выставляет ``needs_review``). Никаких весов
 методов, штрафов и взвешенной агрегации — уверенность методов уже
 детерминирована на этапах извлечения.
 
@@ -16,7 +18,7 @@
 ``attribute_code``. Поэтому ветвления по этому полю здесь нет.
 """
 
-from attribute_extractor.constants import CONFLICT_FEATURE_KEY
+from attribute_extractor.constants import CONFLICT_FEATURE_KEY, CONFLICT_VALUES_KEY
 from specflow_contracts import AttributeCandidate, Span
 from specflow_contracts.constants import MAX_CONFIDENCE, MIN_CONFIDENCE
 
@@ -46,7 +48,12 @@ class CandidateMerger:
             for candidate in candidates
             if candidate.normalized_value == best.normalized_value
         ]
-        has_conflict = len(same_value) < len(candidates)
+        losers = [
+            candidate
+            for candidate in candidates
+            if candidate.normalized_value != best.normalized_value
+        ]
+        has_conflict = bool(losers)
 
         is_confirmed = any(candidate.is_confirmed_in_text for candidate in same_value)
         features: dict[str, object] = {}
@@ -55,6 +62,15 @@ class CandidateMerger:
                 features.update(candidate.features)
         if has_conflict:
             features[CONFLICT_FEATURE_KEY] = True
+            # Победитель первым — в ревью-очереди видно, какой вариант с чем
+            # конкурирует (без проигравших значений решение невозможно).
+            conflicting_values = [best.normalized_value]
+            for candidate in sorted(
+                losers, key=lambda candidate: candidate.confidence, reverse=True
+            ):
+                if candidate.normalized_value not in conflicting_values:
+                    conflicting_values.append(candidate.normalized_value)
+            features[CONFLICT_VALUES_KEY] = conflicting_values
 
         return AttributeCandidate(
             attribute_code=best.attribute_code,

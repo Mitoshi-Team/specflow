@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from attribute_extractor.constants import CONFLICT_FEATURE_KEY
+from attribute_extractor.constants import CONFLICT_FEATURE_KEY, CONFLICT_VALUES_KEY
 from attribute_extractor.merging import CandidateMerger
 from specflow_contracts import AttributeCandidate, ExtractionMethod, Span, SpanField
 
@@ -191,7 +191,10 @@ def test_conflict_keeps_max_confidence_with_flag() -> None:
     )
     assert len(result) == 1
     assert result[0].normalized_value == "black"
-    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["black", "white"],
+    }
 
 
 def test_conflict_without_penalty() -> None:
@@ -203,7 +206,10 @@ def test_conflict_without_penalty() -> None:
         ]
     )
     assert result[0].confidence == pytest.approx(0.9)
-    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["black", "white"],
+    }
 
 
 def test_conflict_ignores_grounding_preference() -> None:
@@ -218,7 +224,10 @@ def test_conflict_ignores_grounding_preference() -> None:
     assert len(result) == 1
     assert result[0].normalized_value == "white"
     assert result[0].is_confirmed_in_text is False
-    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["white", "black"],
+    }
 
 
 def test_different_codes_are_not_merged() -> None:
@@ -251,7 +260,11 @@ def test_conflict_merges_features_from_kept_candidate() -> None:
             _candidate("white", confidence=0.5),
         ]
     )
-    assert result[0].features == {"source": "rule", CONFLICT_FEATURE_KEY: True}
+    assert result[0].features == {
+        "source": "rule",
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["black", "white"],
+    }
 
 
 def test_merge_preserves_tracing_fields_of_best_candidate() -> None:
@@ -309,7 +322,10 @@ def test_conflict_excludes_features_of_losing_value() -> None:
             _candidate("white", confidence=0.5, features={"source": "ner"}),
         ]
     )
-    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["black", "white"],
+    }
 
 
 def test_conflict_merges_spans_of_winning_value_duplicates() -> None:
@@ -325,7 +341,10 @@ def test_conflict_merges_spans_of_winning_value_duplicates() -> None:
         ]
     )
     assert result[0].source_spans == [span_a, span_b]
-    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["black", "white"],
+    }
 
 
 def test_conflict_confirmed_flag_counts_only_winning_value() -> None:
@@ -337,7 +356,10 @@ def test_conflict_confirmed_flag_counts_only_winning_value() -> None:
         ]
     )
     assert result[0].is_confirmed_in_text is False
-    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["black", "white"],
+    }
 
 
 def test_merge_keeps_single_best_value_unconditionally() -> None:
@@ -357,4 +379,27 @@ def test_merge_keeps_single_best_value_unconditionally() -> None:
     assert len(result) == 1
     assert result[0].normalized_value == "white"
     assert result[0].confidence == pytest.approx(0.9)
-    assert result[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["white", "green", "black"],
+    }
+
+
+def test_conflict_values_unique_and_winner_first() -> None:
+    """Порядок конфликтных значений: победитель первым, проигравшие по
+    confidence, повторяющиеся значения не дублируются."""
+    result = CandidateMerger().merge(
+        [
+            _candidate("black", confidence=0.9),
+            _candidate("black", confidence=0.85),
+            _candidate("white", confidence=0.7),
+            _candidate("green", confidence=0.95),
+            _candidate("green", confidence=0.5),
+        ]
+    )
+    assert len(result) == 1
+    assert result[0].normalized_value == "green"
+    assert result[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["green", "black", "white"],
+    }

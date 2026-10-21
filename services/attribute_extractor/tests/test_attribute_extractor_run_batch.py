@@ -309,3 +309,33 @@ def test_run_offline_writes_review_csv_summary(tmp_path: Path) -> None:
 
     assert outcome["review_csv"] == tmp_path / "needs_review.csv"
     assert (tmp_path / "needs_review.csv").exists()
+
+
+def test_review_csv_conflict_values_shows_competing_variants(tmp_path: Path) -> None:
+    """Конфликтная строка видит оба значения: `черный vs серый`."""
+    from attribute_extractor.constants import (
+        CONFLICT_FEATURE_KEY,
+        CONFLICT_VALUES_KEY,
+    )
+    from specflow_contracts import AttributeCandidate, ExtractionMethod, ExtractionStatus
+
+    candidate = AttributeCandidate(
+        attribute_code="color",
+        raw_value="черный",
+        normalized_value="черный",
+        confidence=0.9,
+        extraction_method=ExtractionMethod.RULE,
+        is_confirmed_in_text=True,
+        features={
+            CONFLICT_FEATURE_KEY: True,
+            CONFLICT_VALUES_KEY: ["черный", "серый"],
+        },
+    )
+    run_batch._write_review_csv(
+        [(None, _review_result([candidate], ExtractionStatus.LOW_CONFIDENCE))],
+        tmp_path / "needs_review.csv",
+    )
+
+    rows = _read_review_csv(tmp_path)
+    assert rows[0]["reason"] == "conflict"
+    assert rows[0]["conflict_values"] == "черный vs серый"

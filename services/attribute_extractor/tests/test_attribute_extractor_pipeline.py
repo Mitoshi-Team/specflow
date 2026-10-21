@@ -16,6 +16,7 @@ from attribute_extractor.config import Settings
 from attribute_extractor.constants import (
     AUTO_THRESHOLD,
     CONFLICT_FEATURE_KEY,
+    CONFLICT_VALUES_KEY,
     DEFAULT_DETERMINISTIC_CONFIDENCE,
     REVIEW_THRESHOLD,
     RULE_EXTRACTOR_NAME,
@@ -513,7 +514,10 @@ def test_conflicting_values_keep_max_confidence_and_mark_low_confidence() -> Non
     color = result.attributes[0]
     assert color.normalized_value == "черный"
     assert color.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
-    assert color.features == {CONFLICT_FEATURE_KEY: True}
+    assert color.features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["черный", "белый"],
+    }
     assert result.low_confidence_count == 0
     assert result.needs_review is True
     assert result.status == ExtractionStatus.LOW_CONFIDENCE
@@ -554,7 +558,10 @@ def test_conflict_with_missing_required_marks_partial() -> None:
     result = pipeline.extract(card)
 
     assert [candidate.attribute_code for candidate in result.attributes] == ["color"]
-    assert result.attributes[0].features == {CONFLICT_FEATURE_KEY: True}
+    assert result.attributes[0].features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["черный", "белый"],
+    }
     assert result.needs_review is True
     assert result.status == ExtractionStatus.PARTIAL
 
@@ -595,7 +602,10 @@ def test_allow_multiple_schema_attribute_still_keeps_single_best_value() -> None
     color = result.attributes[0]
     assert color.normalized_value == "черный"
     assert color.confidence == DEFAULT_DETERMINISTIC_CONFIDENCE
-    assert color.features == {CONFLICT_FEATURE_KEY: True}
+    assert color.features == {
+        CONFLICT_FEATURE_KEY: True,
+        CONFLICT_VALUES_KEY: ["черный", "белый"],
+    }
     assert result.needs_review is True
     assert result.status == ExtractionStatus.LOW_CONFIDENCE
 

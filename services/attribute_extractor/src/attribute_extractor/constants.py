@@ -289,6 +289,14 @@ GENERIC_SCHEMA_VERSION = "1.0.0"
 CONFLICT_FEATURE_KEY = "conflict"
 """Ключ признака в ``AttributeCandidate.features``, отмечающий конфликт значений."""
 
+CONFLICT_VALUES_KEY = "conflict_values"
+"""Ключ в ``AttributeCandidate.features``: список конкурировавших значений поля.
+
+Хранится после слияния кандидатов (победитель первым) — данные для очереди
+ручной проверки: без проигравших вариантов решение «какое значение верное»
+невозможно.
+"""
+
 NER_CHARACTERISTIC_FEATURE_KEY = "characteristic"
 """Ключ в ``AttributeCandidate.features``: имя характеристики из NER-пары."""
 
@@ -793,6 +801,7 @@ REVIEW_CSV_COLUMNS = (
     "reason",
     "attribute_code",
     "characteristic",
+    "conflict_values",
     "raw_value",
     "normalized_value",
     "confidence",

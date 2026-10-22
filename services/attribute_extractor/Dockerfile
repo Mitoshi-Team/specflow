@@ -28,8 +28,7 @@ COPY services/attribute_extractor/pyproject.toml services/attribute_extractor/
 # здесь — только внешние зависимости.
 # Кэш uv подключён cache-mount'ом: он переживает пересборки (не нужно качать
 # колеса повторно) и НЕ попадает в образ.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --package attribute-extractor --extra ner --no-install-workspace
+RUN uv sync --frozen --no-dev --package attribute-extractor --extra ner --no-install-workspace
 
 # --- Шаг 2: веса NER-модели (инвалидируются только весами) ---------------------
 # Веса NER-модели (~713 МБ, Git LFS) копируются в образ: сервис должен
@@ -46,8 +45,7 @@ COPY services/attribute_extractor/assets services/attribute_extractor/assets
 
 # Установка пакетов workspace из исходников: локальная сборка колес, без сети
 # (нужное уже в кэше uv предыдущего шага).
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --package attribute-extractor --extra ner
+RUN uv sync --frozen --no-dev --package attribute-extractor --extra ner
 
 # Проверка весов на этапе сборки: образ с нескачанными весами (указатели
 # Git LFS) собираться не должен — иначе сервис молча деградирует до правил.

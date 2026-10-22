@@ -158,6 +158,16 @@ docker compose up --build -d
 `EXTRACTOR_DATABASE_URL` сервис извлечения работает без БД (история до
 перезапуска процесса хранится в памяти).
 
+Образ `attribute_extractor` самодостаточен по NER-модели: веса копируются в
+образ (`/app/models/ner`), `transformers` и `torch` ставятся в образ extra-пакетом
+`ner`. Поэтому NER работает в общей docker-сети без дополнительных томов, а
+проверка — в ответе `GET /api/v1/health`, поле `models_loaded` должно содержать
+`ner`. Если веса не скачаны (`git lfs pull` не выполнен), сборка образа
+останавливается с понятной ошибкой, а не собирает образ, молча работающий на
+правилах. Подробности — в
+[services/attribute_extractor/README.md](services/attribute_extractor/README.md),
+раздел «NER в docker».
+
 Для остановки используйте
 
 ```bash

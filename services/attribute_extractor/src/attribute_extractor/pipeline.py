@@ -10,8 +10,10 @@ graceful degradation (сценарий 3): пайплайн работает н�
 ``CHARACTERISTIC``/``PROPERTY``; тумблер ``enable_vector_match`` применяется
 при его инициализации (Фаза B). Rule-кандидаты идут с кодом поля напрямую.
 
-Rules-fallback (Этап 7) после NER заполняет только те **обязательные** поля
-схемы, которые NER-путь не закрыл; полными правилами NER не дублируется.
+Rule-путь выполняется всегда, когда правила включены: он даёт кандидатов по
+всем поддерживаемым полям, а NER-путь добавляет свои пары. Дубликаты по коду
+поля разрешает merge по confidence. Если NER ничего не нашёл, результат — это
+полный rule-путь (graceful degradation).
 """
 
 from __future__ import annotations
@@ -67,6 +69,7 @@ class ExtractPipeline:
                 # выключена (см. DEFAULT_ENABLE_NER) и подключается opt-in.
                 ner_model_path=self._settings.ner_model_path if self._settings.enable_ner else None,
                 ner_span_min_score=self._settings.ner_span_min_score,
+                ner_device=self._settings.ner_device,
                 match_threshold=self._settings.match_threshold,
             )
         )
@@ -159,35 +162,24 @@ class ExtractPipeline:
         )
 
     def _collect_candidates(self, preprocessed: PreprocessedCard) -> list[AttributeCandidate]:
-        """Этапы 3-4-7: NER-путь, полный rule-путь либо fallback правил.
+        """Этапы 3-4: всегда собирает rule-кандидатов, затем добавляет NER-пары.
 
-        - NER недоступен/выключен (сценарий 3) → полный rule-путь.
-        - NER дал кандидатов → правила дополняют только незакрытые
-          обязательные поля (Этап 7) при ``enable_rules_fallback``.
+        - Правила включены → полный rule-путь выполняется в любом случае;
+          NER не подавляет поля, которые правила уже нашли (brand/model и т.п.).
+        - NER выключен/недоступен (сценарий 3) → остаётся полный rule-путь.
+        - ``enable_rules_fallback=False`` сохраняет прежний режим «только NER»,
+          когда NER-путь дал хотя бы одного кандидата.
         """
         card = preprocessed.card
         schema = preprocessed.category_schema
         rule = self._rule
         ner_candidates = self._run_ner(card, schema)
-        if not ner_candidates:
-            if rule is None or not self._settings.enable_rules:
-                return []
-            return list(rule.extract(card, schema))
-        if (
-            rule is None
-            or not self._settings.enable_rules
-            or not self._settings.enable_rules_fallback
-        ):
-            return ner_candidates
-        closed_required = {candidate.attribute_code for candidate in ner_candidates}
-        fallback_codes = {
-            attribute.code
-            for attribute in schema.required_attributes
-            if attribute.code not in closed_required
-        }
-        if not fallback_codes:
-            return ner_candidates
-        return ner_candidates + rule.extract_for_missing(card, schema, fallback_codes)
+        rule_candidates: list[AttributeCandidate] = []
+        if rule is not None and self._settings.enable_rules:
+            rule_candidates = list(rule.extract(card, schema))
+        if not ner_candidates or not self._settings.enable_rules_fallback:
+            return rule_candidates if not ner_candidates else ner_candidates
+        return rule_candidates + ner_candidates
 
     def _run_ner(self, card: ProductCard, schema: CategorySchema) -> list[AttributeCandidate]:
         """Этап 4: NER-кандидаты; без модели/при ошибке — пусто (degradation)."""

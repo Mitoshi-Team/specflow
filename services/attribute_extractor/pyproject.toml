@@ -13,6 +13,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# NER-инференс: transformers + torch для загрузки обученной модели
+# (services/attribute_extractor/models/ner). torch — CPU-only из pytorch-cpu
+# (см. tool.uv.sources в корне); в docker-образ ставятся оба.
+ner = ["transformers>=5", "torch>=2"]
 # Семантический VectorIndex (резолв полей). Без него работает лексический fallback.
 # torch — CPU-only из pytorch-cpu (см. tool.uv.sources в корне).
 embeddings = ["sentence-transformers>=3", "torch>=2"]

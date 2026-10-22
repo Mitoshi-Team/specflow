@@ -28,6 +28,7 @@ from functools import lru_cache
 from attribute_extractor.constants import (
     NER_LABEL_CHARACTERISTIC,
     NER_LABEL_PROPERTY,
+    RULE_PUNCTUATION_TRIM,
 )
 from attribute_extractor.fields import FieldResolver
 from attribute_extractor.grounding import canonicalize_text
@@ -87,8 +88,8 @@ class WeakRecord:
 
 @lru_cache(maxsize=65536)
 def _token_canonical(token: str) -> str:
-    """Канон одного токена: casefold, ё→е, хвостовая пунктуация (кэшируется)."""
-    return canonicalize_text(token)
+    """Канон одного токена: casefold, ё→е, пунктуация по краям (кэшируется)."""
+    return canonicalize_text(token.strip(RULE_PUNCTUATION_TRIM))
 
 
 @lru_cache(maxsize=8192)
@@ -96,18 +97,21 @@ def _canon_fragments(text: str) -> tuple[tuple[str, int, int], ...]:
     """Канон-фрагменты токенов текста: ``(фрагмент, начало, конец)``.
 
     Канонизация одного токена может дать несколько слов («128GB» → «128
-    gb»); фрагменты несут координаты родительского токена, поэтому спан
-    значения охватывает токен целиком — для слабой разметки достаточно.
+    gb»); фрагменты несут координаты родительского токена без пунктуации по
+    краям, поэтому спан имени/значения не захватывает двоеточие или точку
+    (``«Цвет:» → «Цвет»``, ``«белый.» → «белый»``).
     """
     fragments: list[tuple[str, int, int]] = []
     offset = 0
     for raw_token in text.split():
         token_start, token_end = offset, offset + len(raw_token)
-        cursor = 0
-        for word in _token_canonical(raw_token).split():
-            position = _token_canonical(raw_token).find(word, cursor)
-            fragments.append((word, token_start + min(position, len(raw_token)), token_end))
-            cursor = position + len(word)
+        leading = len(raw_token) - len(raw_token.lstrip(RULE_PUNCTUATION_TRIM))
+        content = raw_token.strip(RULE_PUNCTUATION_TRIM)
+        if content:
+            content_start = token_start + leading
+            content_end = content_start + len(content)
+            for word in _token_canonical(content).split():
+                fragments.append((word, content_start, content_end))
         offset = token_end + 1
     return tuple(fragments)
 
@@ -121,6 +125,8 @@ def find_value_span(
 
     Значение ищется как последовательность канон-токенов (регистр/ё/единицы
     нормализуются: «128GB» ≡ «128 ГБ»); координаты — в исходном тексте.
+    Пунктуация по краям значения и текста не учитывается (``«Цвет:»`` ≡
+    ``«цвет»``), иначе первое упоминание параметра с двоеточием терялось бы.
     Однотокенные значения короче ``_MIN_VALUE_LENGTH`` слишком шумны.
     ``fragments`` — заранее посчитанные канон-фрагменты текста (один раз на
     карточку: тексты уникальны, кэш по тексту не работает).

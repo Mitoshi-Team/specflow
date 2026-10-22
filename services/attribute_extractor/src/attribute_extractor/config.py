@@ -18,6 +18,7 @@ from attribute_extractor.constants import (
     DEFAULT_GROUNDING_REQUIRED,
     DEFAULT_MATCH_THRESHOLD,
     DEFAULT_MAX_BATCH_SIZE,
+    DEFAULT_NER_DEVICE,
     DEFAULT_NER_MODEL_PATH,
     DEFAULT_NER_MODEL_VERSION,
     DEFAULT_NER_SPAN_MIN_SCORE,
@@ -34,6 +35,7 @@ from attribute_extractor.constants import (
     MAX_CONFIDENCE,
     MIN_BATCH_SIZE,
     MIN_CONFIDENCE,
+    NER_DEVICE_MODES,
     REVIEW_CONFIDENCE_THRESHOLD,
     SERVICE_VERSION,
 )
@@ -102,6 +104,9 @@ class Settings(BaseSettings):
     ner_span_min_score: float = Field(
         DEFAULT_NER_SPAN_MIN_SCORE, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE
     )
+    # Устройство инференса NER: auto (cuda при наличии, иначе cpu) / cpu / cuda.
+    # В docker-образе по умолчанию cpu; cuda требует GPU в рантайме.
+    ner_device: str = DEFAULT_NER_DEVICE
 
     # Rate limiting (429); 0 запросов — ограничение выключено.
     rate_limit_requests: int = Field(DEFAULT_RATE_LIMIT_REQUESTS, ge=0)
@@ -121,6 +126,13 @@ class Settings(BaseSettings):
             raise ValueError(
                 "review_confidence_threshold не может превышать default_confidence_threshold"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_ner_device(self) -> "Settings":
+        """Режим устройства инференса NER — из фиксированного набора."""
+        if self.ner_device not in NER_DEVICE_MODES:
+            raise ValueError(f"ner_device должен быть одним из {NER_DEVICE_MODES}")
         return self
 
 

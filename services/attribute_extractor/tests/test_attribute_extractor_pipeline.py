@@ -192,7 +192,60 @@ class _StubNER(BaseExtractor):
         ]
 
 
-def test_ner_candidate_with_rules_fallback_fills_missing_required() -> None:
+class _ColorOnlyNER(BaseExtractor):
+    """FAKE NER: возвращает только цвет, не трогая brand/model."""
+
+    name = NER_EXTRACTOR_NAME
+    priority = 10
+
+    def is_available(self) -> bool:
+        return True
+
+    def extract(self, card: ProductCard, schema) -> list[AttributeCandidate]:
+        span = Span(field=SpanField.DESCRIPTION, text="серебристый", start=42, end=53)
+        return [
+            AttributeCandidate(
+                attribute_code="color",
+                raw_value="серебристый",
+                normalized_value="серебристый",
+                confidence=0.95,
+                extraction_method=ExtractionMethod.NER,
+                is_confirmed_in_text=True,
+                source_spans=[span],
+                evidence_text="серебристый",
+                ner_score=0.95,
+            )
+        ]
+
+
+def test_ner_color_does_not_suppress_rule_brand_and_model() -> None:
+    """NER-кандидат по цвету не должен убирать brand/model, найденные правилами."""
+    from attribute_extractor.extractors import ExtractorRegistry
+    from attribute_extractor.extractors.rule import RuleExtractor
+    from attribute_extractor.references import load_brand_vocab
+
+    card = ProductCard(
+        product_id="syn-000001",
+        title="Стиральная машина Haier HW80-B14979",
+        description="Стиральная машина Haier HW80-B14979, цвет серебристый.",
+        category_name="Стиральные машины",
+    )
+    pipeline = ExtractPipeline(
+        settings=Settings(normalization_enabled=False),
+        registry=ExtractorRegistry([RuleExtractor(load_brand_vocab()), _ColorOnlyNER()]),
+        normalizer=None,
+    )
+    result = pipeline.extract(card)
+
+    by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
+    assert by_code["brand"].extraction_method == ExtractionMethod.RULE
+    assert by_code["model"].extraction_method == ExtractionMethod.RULE
+    assert by_code["color"].extraction_method == ExtractionMethod.NER
+    assert by_code["color"].normalized_value == "серебристый"
+    assert result.status == ExtractionStatus.OK
+
+
+def test_rule_candidates_merge_with_ner_candidates() -> None:
     registry_required = _required_schema_registry()
     card = _card_from_gold(RECORD_1)
     settings = Settings(normalization_enabled=False)
@@ -214,7 +267,7 @@ def test_ner_candidate_with_rules_fallback_fills_missing_required() -> None:
     storage = by_code["storage"].normalized_value
     assert storage.endswith("ГБ")
     codes = {candidate.attribute_code for candidate in result.attributes}
-    assert codes == {"brand", "storage"}
+    assert codes == {"brand", "color", "processor", "ram", "storage"}
     assert result.status == ExtractionStatus.OK
 
 
@@ -255,8 +308,8 @@ def test_rules_fallback_disabled_keeps_ner_candidates_only() -> None:
     assert result.needs_review is True
 
 
-def test_rules_fallback_skips_when_ner_closed_all_required() -> None:
-    """Все обязательные закрыты NER-путём — правила не запускаются (Этап 7)."""
+def test_rules_run_even_when_ner_closed_all_required() -> None:
+    """NER закрыл обязательные поля, но полный rule-путь всё равно выполняется."""
     from attribute_extractor.preprocessing import generic_schema
 
     schema = generic_schema().model_copy(
@@ -275,18 +328,18 @@ def test_rules_fallback_skips_when_ner_closed_all_required() -> None:
     )
     result = pipeline.extract(_card_from_gold(RECORD_1))
 
-    codes = {candidate.attribute_code for candidate in result.attributes}
-    assert codes == {"brand"}
+    by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
+    assert by_code["brand"].extraction_method == ExtractionMethod.NER
+    assert {"storage", "ram", "color"} <= set(by_code)
     assert result.status == ExtractionStatus.OK
 
 
-def test_rules_fallback_uses_schema_loaded_from_artifact(tmp_path) -> None:
-    """Этап 7 работает со схемой, загруженной из JSON-артефакта сборщика.
+def test_rules_and_ner_use_schema_loaded_from_artifact(tmp_path) -> None:
+    """Rule+Ner каскад работает со схемой из JSON-артефакта сборщика.
 
-    Отделяет wiring (``SchemaRegistry.from_file`` → ``CardPreprocessor`` →
-    rules-fallback) от самой логики fallback, проверяемой на реестре в памяти:
-    обязательные поля из артефакта управляют каскадом так же, как и
-    зарегистрированные напрямую.
+    Отделяет wiring (``SchemaRegistry.from_file`` → ``CardPreprocessor``) от
+    логики слияния: схема из артефакта не мешает полному rule-пути, а NER
+    по-прежнему выигрывает одноимённое поле по confidence.
     """
     artifact = tmp_path / "category_schemas.json"
     artifact.write_text(
@@ -326,11 +379,11 @@ def test_rules_fallback_uses_schema_loaded_from_artifact(tmp_path) -> None:
 
     by_code = {candidate.attribute_code: candidate for candidate in result.attributes}
     assert by_code["brand"].extraction_method == ExtractionMethod.NER
-    # storage обязателен по схеме из артефакта → закрывается rules-fallback.
+    # storage находится rule-путём и не подавляется NER-кандидатом brand.
     assert by_code["storage"].extraction_method == ExtractionMethod.RULE
     assert by_code["storage"].normalized_value.endswith("ГБ")
 
-    # Пустой реестр (артефакт без схем) → обязательных нет, fallback не запускается.
+    # Пустой реестр (артефакт без схем) не отключает полный rule-путь.
     empty_artifact = tmp_path / "empty.json"
     empty_artifact.write_text(json.dumps({"version": "1.0.0", "schemas": []}), encoding="utf-8")
     generic_result = ExtractPipeline(
@@ -339,7 +392,11 @@ def test_rules_fallback_uses_schema_loaded_from_artifact(tmp_path) -> None:
         preprocessor=CardPreprocessor(schemas=SchemaRegistry.from_file(empty_artifact)),
         normalizer=None,
     ).extract(card)
-    assert {candidate.attribute_code for candidate in generic_result.attributes} == {"brand"}
+    generic_by_code = {
+        candidate.attribute_code: candidate for candidate in generic_result.attributes
+    }
+    assert generic_by_code["brand"].extraction_method == ExtractionMethod.NER
+    assert {"storage", "ram", "color"} <= set(generic_by_code)
 
 
 def _registry_with_stub():

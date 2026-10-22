@@ -116,3 +116,20 @@ def test_decode_bio_inside_continues_multiword_value():
         ],
     )
     assert [(s.text, s.score) for s in spans] == [("iPhone 11", 0.95)]
+
+
+def test_decode_bio_expand_words_extends_truncated_value():
+    """Обрыв значения на подслове расширяется до границы слова."""
+    text = "цвет серебристый"
+    spans = decode_bio(
+        text,
+        [
+            (0, 4, "B-CHARACTERISTIC", 1.0),
+            (5, 14, "B-PROPERTY", 0.9),
+        ],
+        expand_words=True,
+    )
+    assert [(s.text, s.label) for s in spans] == [
+        ("цвет", "CHARACTERISTIC"),
+        ("серебристый", "PROPERTY"),
+    ]

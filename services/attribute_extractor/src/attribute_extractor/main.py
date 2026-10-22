@@ -48,6 +48,7 @@ from attribute_extractor.errors import (
 )
 from attribute_extractor.extractors import build_default_registry
 from attribute_extractor.extractors.registry import ExtractorRegistry
+from attribute_extractor.paths import resolve_artifact_path
 from attribute_extractor.pipeline import ExtractPipeline
 from attribute_extractor.preprocessing import CardPreprocessor, SchemaRegistry, generic_schema
 from attribute_extractor.rate_limit import RateLimitMiddleware
@@ -143,8 +144,14 @@ def create_app() -> FastAPI:
     на момент сборки — это используют тесты деградации).
     """
     app_settings = Settings()
-    registry: ExtractorRegistry = build_default_registry()
-    schema_registry = _load_schema_registry(app_settings.category_schemas_path)
+    registry: ExtractorRegistry = build_default_registry(
+        ner_model_path=app_settings.ner_model_path,
+        ner_span_min_score=app_settings.ner_span_min_score,
+        match_threshold=app_settings.match_threshold,
+    )
+    schema_registry = _load_schema_registry(
+        str(resolve_artifact_path(app_settings.category_schemas_path))
+    )
     pipeline = ExtractPipeline(
         settings=app_settings,
         registry=registry,

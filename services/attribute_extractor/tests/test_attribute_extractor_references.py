@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from attribute_extractor.constants import DEFAULT_VOCAB_VERSION
 from attribute_extractor.references import (
     AttributeVocab,
@@ -9,7 +11,26 @@ from attribute_extractor.references import (
     ReferenceCatalog,
     UnitRule,
     build_default_catalog,
+    load_brand_vocab,
+    resolve_asset_path,
 )
+
+
+def test_resolve_asset_path_works_from_any_cwd(tmp_path, monkeypatch) -> None:
+    """Дефолтный путь ассета от корня репо резолвится из каталога сервиса.
+
+    Регрессия: run_batch/evaluate запускаются из каталога сервиса, бренд-
+    словарь молча не грузился и правила теряли brand/model (в gold 100 FN).
+    """
+    import attribute_extractor.references as references
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(references, "SERVICE_ROOT", references.SERVICE_ROOT)  # фиксируем корень
+    path = resolve_asset_path(references.DEFAULT_BRAND_VOCAB_PATH)
+    assert path.is_file() is True
+    vocab = load_brand_vocab(references.DEFAULT_BRAND_VOCAB_PATH)
+    assert vocab is not None
+    assert len(vocab.names) > 0
 
 
 def test_attribute_vocab_resolves_canonical_case_insensitive() -> None:

@@ -18,7 +18,9 @@ from attribute_extractor.constants import (
     DEFAULT_GROUNDING_REQUIRED,
     DEFAULT_MATCH_THRESHOLD,
     DEFAULT_MAX_BATCH_SIZE,
+    DEFAULT_NER_MODEL_PATH,
     DEFAULT_NER_MODEL_VERSION,
+    DEFAULT_NER_SPAN_MIN_SCORE,
     DEFAULT_NORMALIZATION_ENABLED,
     DEFAULT_PIPELINE_VERSION,
     DEFAULT_RATE_LIMIT_REQUESTS,
@@ -59,6 +61,7 @@ class Settings(BaseSettings):
     rules_version: str = DEFAULT_RULES_VERSION
     vocab_version: str = DEFAULT_VOCAB_VERSION
     ner_model_version: str = DEFAULT_NER_MODEL_VERSION
+    ner_model_path: str = DEFAULT_NER_MODEL_PATH
 
     # Пороги уверенности.
     default_confidence_threshold: float = Field(
@@ -93,6 +96,12 @@ class Settings(BaseSettings):
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     match_threshold: float = Field(DEFAULT_MATCH_THRESHOLD, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE)
     vector_k: int = Field(DEFAULT_VECTOR_K, ge=1)
+
+    # NER: каталог весов и порог уверенности спанов (precision-first).
+    ner_model_path: str = DEFAULT_NER_MODEL_PATH
+    ner_span_min_score: float = Field(
+        DEFAULT_NER_SPAN_MIN_SCORE, ge=MIN_CONFIDENCE, le=MAX_CONFIDENCE
+    )
 
     # Rate limiting (429); 0 запросов — ограничение выключено.
     rate_limit_requests: int = Field(DEFAULT_RATE_LIMIT_REQUESTS, ge=0)

@@ -5,7 +5,24 @@
 
 from __future__ import annotations
 
-from attribute_extractor.ner_model import decode_bio
+from attribute_extractor.ner_model import decode_bio, filter_spans
+
+
+def _span(text: str, score: float):
+    from attribute_extractor.extractors.ner import NERSpan
+
+    return NERSpan(text=text, label="PROPERTY", start=0, end=len(text), score=score)
+
+
+def test_filter_spans_keeps_high_confidence():
+    spans = [_span("a", 0.9), _span("b", 0.5)]
+    kept = filter_spans(spans, min_score=0.85)
+    assert [s.text for s in kept] == ["a"]
+
+
+def test_filter_spans_keeps_exact_threshold():
+    spans = [_span("a", 0.85)]
+    assert [s.text for s in filter_spans(spans, min_score=0.85)] == ["a"]
 
 
 def test_decode_bio_merges_consecutive_tokens():
@@ -59,3 +76,43 @@ def test_decode_bio_outside_flushes_and_skips_empty_tokens():
     )
     assert len(spans) == 1
     assert (spans[0].start, spans[0].end) == (0, 1)
+
+
+def test_decode_bio_zero_gap_merges_adjacent_subwords():
+    """Подслова одного слова склеиваются независимо от B-/I- префикса."""
+    text = "Восстановленный"
+    spans = decode_bio(
+        text,
+        [
+            (0, 9, "B-PROPERTY", 1.0),
+            (9, 15, "B-PROPERTY", 0.8),
+        ],
+    )
+    assert [(s.text, s.label) for s in spans] == [(text, "PROPERTY")]
+    assert spans[0].score == 0.8
+
+
+def test_decode_bio_gap_splits_same_class_values():
+    """Два значения одного класса, разделённые пробелом — разные спаны."""
+    text = "Apple iPhone"
+    spans = decode_bio(
+        text,
+        [
+            (0, 5, "B-PROPERTY", 1.0),
+            (6, 12, "B-PROPERTY", 1.0),
+        ],
+    )
+    assert [s.text for s in spans] == ["Apple", "iPhone"]
+
+
+def test_decode_bio_inside_continues_multiword_value():
+    """I- продолжение через пробел остаётся одним значением."""
+    text = "iPhone 11"
+    spans = decode_bio(
+        text,
+        [
+            (0, 6, "B-PROPERTY", 0.99),
+            (7, 9, "I-PROPERTY", 0.95),
+        ],
+    )
+    assert [(s.text, s.score) for s in spans] == [("iPhone 11", 0.95)]

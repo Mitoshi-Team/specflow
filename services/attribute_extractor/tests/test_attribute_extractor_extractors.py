@@ -139,3 +139,61 @@ def test_registry_len_and_iter_and_extractors_property() -> None:
     assert list(registry) == [e1, e2]
     assert isinstance(registry.extractors, tuple)
     assert registry.extractors == (e1, e2)
+
+
+def test_default_registry_missing_model_degrades(tmp_path) -> None:
+    """Отсутствие каталога весов — NER недоступен, пайплайн деградирует до правил."""
+    registry = build_default_registry(ner_model_path=tmp_path / "нет-модели")
+    ner = registry.get(NER_EXTRACTOR_NAME)
+    assert ner is not None
+    assert ner.is_available() is False
+    assert ner.predictor is None
+
+
+def test_default_registry_auto_loads_model(monkeypatch, tmp_path) -> None:
+    """Существующий каталог весов: предиктор создаётся автоматически с порогом."""
+    created = {}
+
+    class _FakePredictor:
+        def __init__(self, model_path, min_score=0.0):
+            created["model_path"] = model_path
+            created["min_score"] = min_score
+            created["calls"] = 0
+
+        def predict(self, text):
+            created["calls"] += 1
+            return []
+
+    import attribute_extractor.ner_model as ner_model_module
+
+    monkeypatch.setattr(ner_model_module, "TransformersSpanPredictor", _FakePredictor)
+    (tmp_path / "ner").mkdir()
+    registry = build_default_registry(ner_model_path=tmp_path / "ner", ner_span_min_score=0.7)
+    ner = registry.get(NER_EXTRACTOR_NAME)
+    assert str(created["model_path"]) == str(tmp_path / "ner")
+    assert created["min_score"] == 0.7
+    # Автоматическая загрузка обязана быть доступной (с резолвером Этапа 5).
+    assert ner.is_available() is True
+    assert created["calls"] == 0
+
+
+class _PredictorStub:
+    """Предиктор без резолвера: сам по себе кандидатов не формирует."""
+
+    def predict(self, text: str) -> list:
+        return []
+
+
+def test_default_registry_injected_predictor_without_resolver_stays_unavailable() -> None:
+    """Инъекция предиктора строит резолвер автоматически и делает NER доступным.
+
+    Отличается от прежнего каркаса: Этап 5 (резолв) инициализируется вместе с
+    моделью, без отдельного провода.
+    """
+    registry = build_default_registry(
+        ner_model_path=None,
+        ner_predictor=_PredictorStub(),
+    )
+    ner = registry.get(NER_EXTRACTOR_NAME)
+    assert ner is not None
+    assert ner.is_available() is True

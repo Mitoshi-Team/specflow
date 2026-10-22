@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from attribute_extractor.constants import (
+    DEFAULT_NER_SPAN_MIN_SCORE,
     NER_BIO_OUTSIDE,
     NER_BIO_PREFIX_BEGIN,
     NER_BIO_PREFIX_INSIDE,
@@ -35,9 +36,10 @@ def decode_bio(
 ) -> list[NERSpan]:
     """Собрать спаны из токенов ``(start, end, label, score)``.
 
-    Подряд идущие токены одной сущности объединяются; ``I-`` без
-    предшествующего ``B-`` того же класса начинает новый спан (устойчивость
-    к ошибкам модели). Score спана — минимум по токенам.
+    Смежные (нулевой зазор) и ``I-``-продолжения одной сущности объединяются;
+    ``I-`` после чужой/отсутствующей сущности того же класса не склеивает
+    соседние значения через пробел (начинает новый спан). Score спана —
+    минимум по токенам.
     """
     spans: list[NERSpan] = []
     current: dict | None = None
@@ -63,10 +65,21 @@ def decode_bio(
         if entity is None:
             flush()
             continue
-        if current is not None and current["label"] == entity and prefix == NER_BIO_PREFIX_INSIDE:
-            current["end"] = end
-            current["score"] = min(current["score"], score)
-            continue
+        if current is not None and current["label"] == entity:
+            if start == current["end"]:
+                # Нулевой зазор — смежные подслова одного слова («Восстанов»
+                # + «ленный»): модель после subword-сегментации не обязана
+                # ставить I- на продолжение слова, поэтому склеиваем по
+                # фактам смежности, а не по префиксу.
+                current["end"] = end
+                current["score"] = min(current["score"], score)
+                continue
+            if prefix == NER_BIO_PREFIX_INSIDE:
+                # I- продолжение той же сущности через зазор — слова внутри
+                # одного значения («iPhone 12»).
+                current["end"] = end
+                current["score"] = min(current["score"], score)
+                continue
         flush()
         current = {
             "start": start,
@@ -78,6 +91,14 @@ def decode_bio(
     return spans
 
 
+def filter_spans(
+    spans: Sequence[NERSpan],
+    min_score: float = DEFAULT_NER_SPAN_MIN_SCORE,
+) -> list[NERSpan]:
+    """Отсечь спаны ниже порога уверенности (precision-first политика)."""
+    return [span for span in spans if span.score >= min_score]
+
+
 class TransformersSpanPredictor:
     """``SpanPredictor`` поверх обученной token-classification модели."""
 
@@ -86,6 +107,7 @@ class TransformersSpanPredictor:
         model_path: str,
         device: str | None = None,
         max_length: int = NER_TRAIN_MAX_LENGTH,
+        min_score: float = DEFAULT_NER_SPAN_MIN_SCORE,
     ) -> None:
         import torch
         from transformers import (
@@ -100,6 +122,7 @@ class TransformersSpanPredictor:
         self._model.to(self._device)
         self._model.eval()
         self._max_length = max_length
+        self._min_score = min_score
         self._id2label = {idx: label for idx, label in self._model.config.id2label.items()}
 
     def predict(self, text: str) -> list[NERSpan]:
@@ -128,4 +151,4 @@ class TransformersSpanPredictor:
             if start == end:
                 continue
             tokens.append((start, end, self._id2label[label_id], float(score)))
-        return decode_bio(text, tokens)
+        return filter_spans(decode_bio(text, tokens), self._min_score)

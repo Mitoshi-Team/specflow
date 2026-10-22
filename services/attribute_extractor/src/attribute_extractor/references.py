@@ -138,6 +138,17 @@ def build_default_catalog() -> ReferenceCatalog:
     return ReferenceCatalog()
 
 
+SERVICE_ROOT = Path(__file__).resolve().parents[2]
+"""Корень сервиса (совместимо с ``paths.SERVICE_ROOT``)."""
+
+
+def resolve_asset_path(path: str | Path) -> Path:
+    """Разрешить путь ассета независимо от рабочего каталога (шлюз к ``paths``)."""
+    from attribute_extractor.paths import resolve_artifact_path
+
+    return resolve_artifact_path(path)
+
+
 def load_brand_vocab(path: str | Path = DEFAULT_BRAND_VOCAB_PATH) -> BrandVocab | None:
     """Загрузить бренд-словарь из версонируемого ассета.
 
@@ -149,11 +160,14 @@ def load_brand_vocab(path: str | Path = DEFAULT_BRAND_VOCAB_PATH) -> BrandVocab 
     сборку реестра (``build_default_registry`` → старт сервиса), однако и не
     должна пройти молча.
     """
+    resolved = resolve_asset_path(path)
     try:
-        with Path(path).open(encoding="utf-8") as file:
+        with resolved.open(encoding="utf-8") as file:
             return BrandVocab.model_validate(json.load(file))
     except FileNotFoundError:
         return None
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValidationError):
-        logger.exception("Бренд-словарь в %s не загрузился; работаем без брендовых правил", path)
+        logger.exception(
+            "Бренд-словарь в %s не загрузился; работаем без брендовых правил", resolved
+        )
         return None

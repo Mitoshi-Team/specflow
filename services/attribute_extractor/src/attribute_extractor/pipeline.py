@@ -58,7 +58,18 @@ class ExtractPipeline:
         confidence: ConfidenceCalculator | None = None,
     ) -> None:
         self._settings = settings if settings is not None else Settings()
-        self._registry = registry if registry is not None else build_default_registry()
+        self._registry = (
+            registry
+            if registry is not None
+            else build_default_registry(
+                # Тумблер enable_ner=0 не должен платить за загрузку весов:
+                # NER просто исключается из реестра. По умолчанию модель
+                # выключена (см. DEFAULT_ENABLE_NER) и подключается opt-in.
+                ner_model_path=self._settings.ner_model_path if self._settings.enable_ner else None,
+                ner_span_min_score=self._settings.ner_span_min_score,
+                match_threshold=self._settings.match_threshold,
+            )
+        )
         self._rule = self._registry.get(RULE_EXTRACTOR_NAME)
         self._ner = self._registry.get(NER_EXTRACTOR_NAME)
         self._preprocessor = preprocessor if preprocessor is not None else CardPreprocessor()
@@ -124,10 +135,10 @@ class ExtractPipeline:
             candidate.features and CONFLICT_FEATURE_KEY in candidate.features
             for candidate in candidates
         )
+        required_missing = _required_missing(candidates, preprocessed)
         # Авто-новое поле (Этап 5) всегда требует ручной проверки: канонический
         # код назначает только аудит (domain-model.md, повышение is_new_field).
         has_new_field = any(candidate.is_new_field for candidate in candidates)
-        required_missing = _required_missing(candidates, preprocessed)
         needs_review = bool(
             low_confidence_count or has_conflict or required_missing or has_new_field
         )

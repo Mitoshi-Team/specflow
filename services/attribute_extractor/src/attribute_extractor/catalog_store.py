@@ -10,6 +10,7 @@ from attribute_extractor.constants import (
     DEFAULT_FIELD_CATALOG_PATH,
 )
 from attribute_extractor.field_catalog_seed import FIELD_CATALOG_VERSION
+from attribute_extractor.paths import resolve_artifact_path
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,8 @@ class CatalogStore:
         catalog_path: str | Path = DEFAULT_FIELD_CATALOG_PATH,
         blocklist_path: str | Path = DEFAULT_FIELD_BLOCKLIST_PATH,
     ) -> None:
-        self.catalog_path = Path(catalog_path)
-        self.blocklist_path = Path(blocklist_path)
+        self.catalog_path = resolve_artifact_path(catalog_path)
+        self.blocklist_path = resolve_artifact_path(blocklist_path)
         self.catalog_path.parent.mkdir(parents=True, exist_ok=True)
         self.blocklist_path.parent.mkdir(parents=True, exist_ok=True)
 

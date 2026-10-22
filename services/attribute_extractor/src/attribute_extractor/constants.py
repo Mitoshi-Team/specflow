@@ -725,6 +725,7 @@ REVIEW_THRESHOLD = REVIEW_CONFIDENCE_THRESHOLD
 DEFAULT_ENABLE_RULES = True
 """Тумблер rule-пути (Этап 3/7) в оркестраторе."""
 
+# NER (Этап 4)
 DEFAULT_ENABLE_NER = True
 """Тумблер NER-пути (Этап 4) в оркестраторе."""
 
@@ -870,7 +871,15 @@ DEFAULT_FIELD_BLOCKLIST_PATH = "data/field_blocklist.txt"
 """Путь к блоклисту полей по умолчанию."""
 
 DEFAULT_NER_MODEL_PATH = "models/ner"
-"""Путь к NER-модели по умолчанию."""
+"""Путь к NER-модели по умолчанию (относительно корня сервиса)."""
+
+DEFAULT_NER_SPAN_MIN_SCORE = 0.85
+"""Минимальная уверенность NER-спана, попадающего в кандидаты.
+
+Стартовое значение выбрано precision-first: модели на val уверенно дают
+score ~1.0 на валидных спанах, поэтому порог 0.85 отсекает слабые, а не
+полезные предсказания. Калибруется на gold-наборе.
+"""
 
 DEFAULT_VECTOR_K = 5
 """Число ближайших кандидатов при поиске в VectorIndex."""

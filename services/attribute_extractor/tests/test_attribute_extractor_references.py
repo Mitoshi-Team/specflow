@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from attribute_extractor.constants import DEFAULT_VOCAB_VERSION
 from attribute_extractor.references import (
     AttributeVocab,

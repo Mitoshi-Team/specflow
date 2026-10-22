@@ -94,6 +94,7 @@ docker-сети и содержит пайплайн извлечения; API G
 
 - Python 3.13
 - [uv](https://docs.astral.sh/uv/)
+- [Git LFS](https://git-lfs.com/) — веса NER-модели (~1.4 ГБ)
 - Node.js 22+ (для локальной разработки фронтенда)
 - Docker и Docker Compose
 
@@ -101,10 +102,21 @@ docker-сети и содержит пайплайн извлечения; API G
 
 ### 1. Клонируйте репозиторий
 
+Веса NER-модели хранятся через **Git LFS** (~1.4 ГБ), поэтому сначала
+включите LFS — иначе вместо весов вы получите текстовые указатели и извлечение
+заработает без модели (правила останутся, `/health` покажет `degraded`):
+
 ```bash
+git lfs install
 git clone https://github.com/Mitoshi-Team/specflow
 cd specflow
+git lfs pull    # дотянуть веса, если клонировали без git lfs install
+git lfs ls-files    # «*» у файла значит, что он скачан
 ```
+
+Подробнее о модели и её включении — в
+[services/attribute_extractor/README.md](services/attribute_extractor/README.md),
+раздел «Модель NER: веса, включение, диагностика».
 
 ### 2. Создайте .env на основе .env.example
 

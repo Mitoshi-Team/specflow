@@ -459,6 +459,57 @@ generic-схему, карточки получают generic-fallback (поро
 `CATEGORY_SCHEMA_REQUIRED_SHARE`/`CATEGORY_SCHEMA_MIN_CARDS` в
 `constants.py`).
 
+### Модель NER: веса, включение, диагностика
+
+Веса обученной NER-модели (Этап 4) лежат в репозитории и выгружаются через
+**Git LFS** — файлы большие, поэтому обычный `git clone` без LFS кладёт вместо
+весов текстовые указатели и модель не загрузится:
+
+```bash
+git lfs install                      # один раз на машине
+git clone https://github.com/Mitoshi-Team/specflow.git
+cd specflow
+git lfs pull                         # дотянуть веса, если клонировали без LFS
+git lfs ls-files                     # звёздочка «*» — файл скачан
+```
+
+| Артефакт | Назначение | Размер |
+| --- | --- | --- |
+| `services/attribute_extractor/models/ner/` | каталог модели: `config.json`, `model.safetensors`, `tokenizer.json`, `labels.json`, `metrics.json` | ~713 МБ |
+| `services/attribute_extractor/models/ner_model_v3.zip` | тот же архив одной пачкой (запасной вариант установки) | ~713 МБ |
+
+**Подключение.** Модель подключается автоматически при старте, если каталог
+весов существует: `build_default_registry` создаёт предиктор и резолвер
+Этапа 5 (см. `extractors/__init__.py`). Управление — переменные окружения:
+
+| Переменная | По умолчанию | Назначение |
+| --- | --- | --- |
+| `EXTRACTOR_ENABLE_NER` | `true` | тумблер Этапа 4 |
+| `EXTRACTOR_NER_MODEL_PATH` | `models/ner` | каталог весов |
+| `EXTRACTOR_NER_SPAN_MIN_SCORE` | `0.85` | порог отсечения слабых спанов (precision-first) |
+
+**Проверка:** в ответе `GET /api/v1/health` поле `models_loaded` должно
+содержать `ner` (иначе `status: degraded` — модель не подключена).
+
+**Деградация.** Отсутствие весов, не установленного `torch`/`transformers` или
+битый каталог не роняет сервис: причина пишется в лог с traceback, пайплайн
+штатно работает на правилах (`status: degraded`). Пустой каталог весов тоже
+даст такое предупреждение.
+
+**Резолв путей артефактов** (карты весов, справочники, каталог полей) идёт
+через `paths.resolve_artifact_path` в порядке: текущий каталог процесса →
+корень сервиса → корень репозитория. Поэтому пустой каталог `models/ner` в
+текущем каталоге перебьёт настоящий веса в `services/attribute_extractor/models/ner` —
+при запуске из корня репозитория такой мусорный каталог нужно удалить.
+
+**Метрики модели v3** на валидационном split (после фикса маски `-100` в
+`compute_metrics`) — `models/ner/metrics.json`: OVERALL precision 0.959 /
+recall 0.980 / F1 0.9695 (CHARACTERISTIC 0.9585, PROPERTY 0.9706).
+
+**Обновление модели** — `colab_ner/README.md`: блокнот в Google Colab,
+архив `ner_model_<версия>.zip` распаковывается в каталог весов, версия
+попадает в `EXTRACTOR_NER_MODEL_VERSION` (`.env`).
+
 ### Weak-датасет для NER (distant supervision)
 
 `scripts/make_ner_weak_dataset.py` строит обучающую выборку для NER (Этап 4)

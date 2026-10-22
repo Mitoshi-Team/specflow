@@ -7,7 +7,6 @@ import logging
 from attribute_extractor.constants import (
     DEFAULT_BRAND_VOCAB_PATH,
     DEFAULT_MATCH_THRESHOLD,
-    DEFAULT_NER_MODEL_PATH,
     DEFAULT_NER_SPAN_MIN_SCORE,
 )
 from attribute_extractor.extractors.base import BaseExtractor

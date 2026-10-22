@@ -44,6 +44,33 @@ def test_find_value_span_short_single_token_rejected() -> None:
     assert weak_markup.find_value_span("Заголовок: X 5", "5") is None
 
 
+def test_find_value_span_ignores_edge_punctuation_and_prefers_first_mention() -> None:
+    text = "Заголовок: Чайник Описание: Цвет: белый. Чайник, цвет белый."
+    name_span = weak_markup.find_value_span(text, "Цвет")
+    assert name_span is not None
+    assert text[name_span[0] : name_span[1]] == "Цвет"
+    value_span = weak_markup.find_value_span(text, "белый")
+    assert value_span is not None
+    assert text[value_span[0] : value_span[1]] == "белый"
+
+
+def test_build_record_marks_first_characteristic_mention_without_punctuation(tmp_path) -> None:
+    resolver = _resolver(tmp_path)
+    record = weak_markup.build_record(
+        "Чайник Acme",
+        "Цвет: белый. Чайник Acme, цвет белый.",
+        [{"name": "Цвет", "value": "белый"}],
+        resolver,
+    )
+    assert record is not None
+    characteristic_spans = [span for span in record.spans if span.label == "CHARACTERISTIC"]
+    property_spans = [span for span in record.spans if span.label == "PROPERTY"]
+    assert [(record.text[s.start : s.end], s.start) for s in characteristic_spans] == [
+        ("Цвет", record.text.index("Цвет"))
+    ]
+    assert [record.text[s.start : s.end] for s in property_spans] == ["белый"]
+
+
 def test_build_record_pairs_characteristic_and_property(tmp_path) -> None:
     resolver = _resolver(tmp_path)
     record = weak_markup.build_record(

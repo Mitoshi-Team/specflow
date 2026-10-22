@@ -35,9 +35,20 @@ def _split_label(label: str) -> tuple[str, str | None]:
     return NER_BIO_OUTSIDE, None
 
 
+def _expand_to_word_boundaries(text: str, start: int, end: int) -> tuple[int, int]:
+    """Расширить границы спана, если они приходятся на середину слова."""
+    while start > 0 and text[start - 1].isalnum():
+        start -= 1
+    while end < len(text) and text[end].isalnum():
+        end += 1
+    return start, end
+
+
 def decode_bio(
     text: str,
     tokens: Sequence[tuple[int, int, str, float]],
+    *,
+    expand_words: bool = False,
 ) -> list[NERSpan]:
     """Собрать спаны из токенов ``(start, end, label, score)``.
 
@@ -45,6 +56,9 @@ def decode_bio(
     ``I-`` после чужой/отсутствующей сущности того же класса не склеивает
     соседние значения через пробел (начинает новый спан). Score спана —
     минимум по токенам.
+
+    ``expand_words=True`` расширяет границы спана до границы слова: модель
+    иногда обрывает значение на подслове («серебрист» вместо «серебристый»).
     """
     spans: list[NERSpan] = []
     current: dict | None = None
@@ -52,12 +66,15 @@ def decode_bio(
     def flush() -> None:
         nonlocal current
         if current is not None:
+            start, end = current["start"], current["end"]
+            if expand_words:
+                start, end = _expand_to_word_boundaries(text, start, end)
             spans.append(
                 NERSpan(
-                    text=text[current["start"] : current["end"]],
+                    text=text[start:end],
                     label=current["label"],
-                    start=current["start"],
-                    end=current["end"],
+                    start=start,
+                    end=end,
                     score=current["score"],
                 )
             )
@@ -170,4 +187,6 @@ class TransformersSpanPredictor:
             if start == end:
                 continue
             tokens.append((start, end, self._id2label[label_id], float(score)))
-        return filter_spans(decode_bio(text, tokens), self._min_score)
+        return filter_spans(
+            decode_bio(text, tokens, expand_words=True), self._min_score
+        )

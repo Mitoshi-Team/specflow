@@ -67,6 +67,7 @@ class ExtractPipeline:
                 # выключена (см. DEFAULT_ENABLE_NER) и подключается opt-in.
                 ner_model_path=self._settings.ner_model_path if self._settings.enable_ner else None,
                 ner_span_min_score=self._settings.ner_span_min_score,
+                ner_device=self._settings.ner_device,
                 match_threshold=self._settings.match_threshold,
             )
         )

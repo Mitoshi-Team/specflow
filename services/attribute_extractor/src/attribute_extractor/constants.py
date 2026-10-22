@@ -873,6 +873,36 @@ DEFAULT_FIELD_BLOCKLIST_PATH = "data/field_blocklist.txt"
 DEFAULT_NER_MODEL_PATH = "models/ner"
 """Путь к NER-модели по умолчанию (относительно корня сервиса)."""
 
+NER_DEVICE_AUTO = "auto"
+"""Режим устройства инференса NER: выбрать автоматически (CUDA при наличии)."""
+
+NER_DEVICE_CPU = "cpu"
+"""Режим устройства инференса NER: только CPU."""
+
+NER_DEVICE_CUDA = "cuda"
+"""Режим устройства инференса NER: только CUDA (без GPU — деградация до CPU)."""
+
+NER_DEVICE_MODES = (NER_DEVICE_AUTO, NER_DEVICE_CPU, NER_DEVICE_CUDA)
+"""Допустимые режимы устройства инференса NER (значение настройки ``ner_device``)."""
+
+DEFAULT_NER_DEVICE = NER_DEVICE_AUTO
+"""Режим устройства инференса NER по умолчанию."""
+
+NER_WEIGHTS_FILENAME = "model.safetensors"
+"""Имя файла с весами модели (safetensors) в каталоге NER-модели."""
+
+NER_CONFIG_FILENAME = "config.json"
+"""Имя файла с конфигурацией модели в каталоге NER-модели."""
+
+NER_TOKENIZER_FILENAME = "tokenizer.json"
+"""Имя файла с токенизатором в каталоге NER-модели."""
+
+GIT_LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1"
+"""Префикс файла-указателя Git LFS (вместо реальных данных)."""
+
+GIT_LFS_POINTER_HEAD_BYTES = 64
+"""Сколько байт читать с начала файла, чтобы распознать указатель Git LFS."""
+
 DEFAULT_NER_SPAN_MIN_SCORE = 0.85
 """Минимальная уверенность NER-спана, попадающего в кандидаты.
 

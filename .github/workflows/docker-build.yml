@@ -65,6 +65,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Веса NER-модели (~713 МБ) хранятся в Git LFS: без их скачивания
+          # в образ попадут указатели вместо весов и сборка образа упадёт
+          # на проверке check_ner_model.py.
+          lfs: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

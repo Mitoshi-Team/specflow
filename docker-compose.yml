@@ -104,6 +104,11 @@ services:
       # Серверная история батчей (api_contract.md, 4.8/4.9). Пароль — только
       # для локальной разработки, в проде задаётся через .env (см. .env.example).
       EXTRACTOR_DATABASE_URL: postgresql://${POSTGRES_USER:-specflow}:${POSTGRES_PASSWORD:-specflow}@postgres:5432/${POSTGRES_DB:-specflow}
+      # Веса NER-модели лежат в образе (services/attribute_extractor/models/ner
+      # → /app/models/ner); путь абсолютный, чтобы не зависеть от CWD.
+      EXTRACTOR_NER_MODEL_PATH: /app/models/ner
+      # Версия весов попадает в трассировку ответов (EXTRACTOR_NER_MODEL_VERSION).
+      EXTRACTOR_NER_MODEL_VERSION: ${EXTRACTOR_NER_MODEL_VERSION:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,11 +117,13 @@ services:
       # собирается scripts/build_category_schemas.py; без него — generic-fallback).
       - ./data:/app/data
     healthcheck:
+      # Модель грузится при старте процесса (~десятки секунд на CPU), поэтому
+      # стартовый grace-period длиннее обычного.
       test: ["CMD-SHELL", "python3 -c \"import sys, urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health', timeout=2); sys.exit(0)\" || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 15s
+      retries: 12
+      start_period: 90s
     logging:
       driver: json-file
       options:

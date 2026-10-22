@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 
 from attribute_extractor.constants import (
@@ -15,9 +16,13 @@ from attribute_extractor.constants import (
     NER_BIO_OUTSIDE,
     NER_BIO_PREFIX_BEGIN,
     NER_BIO_PREFIX_INSIDE,
+    NER_DEVICE_AUTO,
+    NER_DEVICE_CUDA,
     NER_TRAIN_MAX_LENGTH,
 )
 from attribute_extractor.extractors.ner import NERSpan
+
+logger = logging.getLogger(__name__)
 
 
 def _split_label(label: str) -> tuple[str, str | None]:
@@ -118,12 +123,26 @@ class TransformersSpanPredictor:
         self._torch = torch
         self._tokenizer = AutoTokenizer.from_pretrained(model_path)
         self._model = AutoModelForTokenClassification.from_pretrained(model_path)
-        self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self._device = self._resolve_device(device)
         self._model.to(self._device)
         self._model.eval()
         self._max_length = max_length
         self._min_score = min_score
         self._id2label = {idx: label for idx, label in self._model.config.id2label.items()}
+
+    def _resolve_device(self, device: str | None) -> str:
+        """Выбрать устройство инференса.
+
+        ``auto`` (по умолчанию) — CUDA, если она доступна, иначе CPU;
+        ``cuda`` без доступного GPU деградирует до CPU (в контейнере без
+        GPU-рантайма это штатный режим, а не ошибка).
+        """
+        if device in (None, "", NER_DEVICE_AUTO):
+            return "cuda" if self._torch.cuda.is_available() else "cpu"
+        if device == NER_DEVICE_CUDA and not self._torch.cuda.is_available():
+            logger.warning("Запрошено устройство cuda, но GPU недоступен — инференс на CPU")
+            return "cpu"
+        return device
 
     def predict(self, text: str) -> list[NERSpan]:
         if not text.strip():

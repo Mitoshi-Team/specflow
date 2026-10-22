@@ -155,9 +155,10 @@ def test_default_registry_auto_loads_model(monkeypatch, tmp_path) -> None:
     created = {}
 
     class _FakePredictor:
-        def __init__(self, model_path, min_score=0.0):
+        def __init__(self, model_path, min_score=0.0, device=None):
             created["model_path"] = model_path
             created["min_score"] = min_score
+            created["device"] = device
             created["calls"] = 0
 
         def predict(self, text):
@@ -175,6 +176,43 @@ def test_default_registry_auto_loads_model(monkeypatch, tmp_path) -> None:
     # Автоматическая загрузка обязана быть доступной (с резолвером Этапа 5).
     assert ner.is_available() is True
     assert created["calls"] == 0
+
+
+def test_default_registry_passes_device_to_predictor(monkeypatch, tmp_path) -> None:
+    """Режим устройства инференса доходит до предиктора (EXTRACTOR_NER_DEVICE)."""
+    created = {}
+
+    class _FakePredictor:
+        def __init__(self, model_path, min_score=0.0, device=None):
+            created["device"] = device
+
+        def predict(self, text):
+            return []
+
+    import attribute_extractor.ner_model as ner_model_module
+
+    monkeypatch.setattr(ner_model_module, "TransformersSpanPredictor", _FakePredictor)
+    (tmp_path / "ner").mkdir()
+
+    build_default_registry(ner_model_path=tmp_path / "ner", ner_device="cpu")
+
+    assert created["device"] == "cpu"
+
+
+def test_default_registry_skips_model_with_lfs_pointers(monkeypatch, tmp_path) -> None:
+    """Веса-указатели Git LFS: NER отключается, пайплайн деградирует до правил."""
+    model_dir = tmp_path / "ner"
+    model_dir.mkdir()
+    (model_dir / "model.safetensors").write_bytes(
+        b"version https://git-lfs.github.com/spec/v1\noid sha256:0\nsize 1\n"
+    )
+
+    registry = build_default_registry(ner_model_path=model_dir)
+    ner = registry.get(NER_EXTRACTOR_NAME)
+
+    assert ner is not None
+    assert ner.is_available() is False
+    assert ner.predictor is None
 
 
 class _PredictorStub:

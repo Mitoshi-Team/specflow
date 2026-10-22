@@ -10,6 +10,12 @@ Rate limiting выключен для общего прогона: тесты д
 может лежать собранный ``data/category_schemas.json``, и без пина тесты
 ``/categories`` зависели бы от локального артефакта. Сценарий с реестром
 покрывается отдельными тестами, явно подставляющими свой артефакт.
+
+Каталог весов NER тоже пинуется на несуществующий путь: в рабочей копии
+может лежать настоящая модель (~713 МБ, Git LFS), и тогда каждый прогон
+тестов грузил бы веса — на порядок медленнее и с результатом, зависящим от
+окружения (``models_loaded`` в ``/health``). Тесты загрузки модели
+используют собственные временные каталоги.
 """
 
 import os
@@ -19,4 +25,8 @@ os.environ.setdefault("EXTRACTOR_RATE_LIMIT_REQUESTS", "0")
 os.environ.setdefault(
     "EXTRACTOR_CATEGORY_SCHEMAS_PATH",
     str(FsPath(__file__).resolve().parent / "_missing_category_schemas.json"),
+)
+os.environ.setdefault(
+    "EXTRACTOR_NER_MODEL_PATH",
+    str(FsPath(__file__).resolve().parent / "_missing_ner_model"),
 )

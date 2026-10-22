@@ -147,6 +147,7 @@ def create_app() -> FastAPI:
     registry: ExtractorRegistry = build_default_registry(
         ner_model_path=app_settings.ner_model_path,
         ner_span_min_score=app_settings.ner_span_min_score,
+        ner_device=app_settings.ner_device,
         match_threshold=app_settings.match_threshold,
     )
     schema_registry = _load_schema_registry(

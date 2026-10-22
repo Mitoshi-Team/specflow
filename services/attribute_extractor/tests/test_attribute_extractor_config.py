@@ -8,6 +8,7 @@ from attribute_extractor.constants import (
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_MATCH_THRESHOLD,
     DEFAULT_MAX_BATCH_SIZE,
+    DEFAULT_NER_DEVICE,
     DEFAULT_PIPELINE_VERSION,
     DEFAULT_RULES_VERSION,
     DEFAULT_VECTOR_BACKEND,
@@ -130,6 +131,27 @@ def test_rejects_threshold_order_violation(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_rejects_confidence_threshold_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EXTRACTOR_DEFAULT_CONFIDENCE_THRESHOLD", "1.5")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_ner_device_defaults_to_auto() -> None:
+    config = Settings(_env_file=None)
+
+    assert config.ner_device == DEFAULT_NER_DEVICE
+
+
+def test_ner_device_environment_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EXTRACTOR_NER_DEVICE", "cpu")
+
+    config = Settings(_env_file=None)
+
+    assert config.ner_device == "cpu"
+
+
+def test_ner_device_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EXTRACTOR_NER_DEVICE", "tpu")
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)

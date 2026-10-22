@@ -485,8 +485,9 @@ git lfs ls-files                     # звёздочка «*» — файл с�
 | Переменная | По умолчанию | Назначение |
 | --- | --- | --- |
 | `EXTRACTOR_ENABLE_NER` | `true` | тумблер Этапа 4 |
-| `EXTRACTOR_NER_MODEL_PATH` | `models/ner` | каталог весов |
+| `EXTRACTOR_NER_MODEL_PATH` | `models/ner` | каталог весов (в docker — `/app/models/ner`) |
 | `EXTRACTOR_NER_SPAN_MIN_SCORE` | `0.85` | порог отсечения слабых спанов (precision-first) |
+| `EXTRACTOR_NER_DEVICE` | `auto` | устройство инференса: `auto` / `cpu` / `cuda` |
 
 **Проверка:** в ответе `GET /api/v1/health` поле `models_loaded` должно
 содержать `ner` (иначе `status: degraded` — модель не подключена).
@@ -494,7 +495,10 @@ git lfs ls-files                     # звёздочка «*» — файл с�
 **Деградация.** Отсутствие весов, не установленного `torch`/`transformers` или
 битый каталог не роняет сервис: причина пишется в лог с traceback, пайплайн
 штатно работает на правилах (`status: degraded`). Пустой каталог весов тоже
-даст такое предупреждение.
+даст такое предупреждение. Если на месте файлов лежат указатели Git LFS
+(веса не скачаны), сервис пишет в лог понятную причину
+(`файлы модели — указатели Git LFS ... выполните git lfs pull`), а не
+traceback загрузчика.
 
 **Резолв путей артефактов** (карты весов, справочники, каталог полей) идёт
 через `paths.resolve_artifact_path` в порядке: текущий каталог процесса →
@@ -509,6 +513,59 @@ recall 0.980 / F1 0.9695 (CHARACTERISTIC 0.9585, PROPERTY 0.9706).
 **Обновление модели** — `colab_ner/README.md`: блокнот в Google Colab,
 архив `ner_model_<версия>.zip` распаковывается в каталог весов, версия
 попадает в `EXTRACTOR_NER_MODEL_VERSION` (`.env`).
+
+### NER в docker
+
+Образ `services/attribute_extractor/Dockerfile` самодостаточен: веса модели
+копируются в образ (`/app/models/ner`), а `transformers` и `torch` (CPU-only)
+ставятся extra-пакетом `ner`. Поэтому NER работает в общей docker-сети
+вместе с `api_gateway`, `nginx` и `postgres` без дополнительных томов.
+
+```bash
+git lfs pull                          # без весов сборка образа упадёт (см. ниже)
+docker compose build attribute_extractor
+docker compose up -d
+docker compose exec attribute_extractor \
+  python3 -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8001/api/v1/health').read().decode())"
+# models_loaded должен содержать "ner"
+```
+
+| Что | Где |
+| --- | --- |
+| Веса в образе | `/app/models/ner` (`COPY services/attribute_extractor/models/ner`) |
+| Путь в рантайме | `EXTRACTOR_NER_MODEL_PATH=/app/models/ner` (задаётся в `docker-compose.yml`) |
+| Зависимости | extra `ner` в `services/attribute_extractor/pyproject.toml`: `transformers`, `torch` (CPU-индекс `pytorch-cpu`) |
+| Потоки CPU | `OMP_NUM_THREADS` / `MKL_NUM_THREADS` (в образе 4, переопределяется в compose) |
+| Устройство | `EXTRACTOR_NER_DEVICE`: `auto` (cuda при наличии) / `cpu` / `cuda` |
+
+**Сборка падает, если веса не скачаны.** На этапе сборки выполняется
+`scripts/check_ner_model.py`: каталог с указателями Git LFS (или без
+обязательных файлов) не проходит проверку, и `docker build` завершается с
+ошибкой вместо образа, который молча работал бы на правилах. Та же проверка
+доступна вручную:
+
+```bash
+python services/attribute_extractor/scripts/check_ner_model.py models/ner
+```
+
+**Замена весов без пересборки образа.** Том с весами на хосте перекрывает
+каталог в образе (тома монтируются поверх слоя):
+
+```yaml
+services:
+  attribute_extractor:
+    volumes:
+      - ./services/attribute_extractor/models/ner:/app/models/ner:ro
+```
+
+**Локальный запуск вне docker** требует тех же тяжёлых зависимостей:
+
+```bash
+uv sync --all-packages --extra ner   # transformers + torch в .venv
+```
+
+Без них сервис стартует, но NER отключается (`status: degraded`) — пайплайн
+работает на правилах.
 
 ### Weak-датасет для NER (distant supervision)
 
